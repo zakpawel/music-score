@@ -1,0 +1,56 @@
+/* some style */
+
+#container {
+	position: relative;
+}
+
+#keyboard {
+	position: fixed;
+	bottom: 0;
+}
+
+#notation-exercise, #notation-answer {
+	height: 250px !important;
+	transform: scale(1.5);
+	transform-origin: 0 0;
+}
+
+#sidebar {
+}
+
+.error {
+	fill: red;
+}
+
+.correct {
+	fill: green;
+}
+
+.octave {
+	display: inline-block;
+	position: relative;
+}
+
+.key {
+	display: inline-block;
+	vertical-align: top;
+	box-sizing: border-box;
+}
+
+.key.black {
+	background-color: black;
+	width: 10px;
+	height: 75px;
+	position: absolute;
+}
+
+.key.white {
+	background-color: white;
+	width: 20px;
+	height: 120px;
+	border: 1px solid lightgray;
+}
+
+.selected-clef {
+	font-weight: bold;
+}
