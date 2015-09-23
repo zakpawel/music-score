@@ -25,13 +25,21 @@
          :stage :guessing
          :config {:key :bass
                   :range []}}))
-(defonce _input-chan (z/write-port 1))
-(print _input-chan)
-(defonce *input-chan* (z/to-chan (z/write-port 1)))
-;; (defonce _input-mult (async/mult _input-chan))
-;; (defonce *input-chan* (async/tap _input-mult (async/chan)))
-(defonce *model-chan* (async/chan))
 
+(defonce initial-model
+         {:question []
+          :answer []
+          :stage :guessing
+          :config {:key :bass
+                   :range []}})
+
+;; (defonce _input-chan (z/write-port 1))
+;; (defonce input-signal (z/to-chan (z/write-port 1)))
+;; (defonce _input-mult (async/mult _input-chan))
+;; (defonce input-signal (async/tap _input-mult (async/chan)))
+;; (defonce *model-chan* (async/chan))
+
+(defonce input-signal (z/write-port [:key-press 70]))
 (defonce *instrument* (js/Instrument. #js {:wave "piano" :detune 0}))
 
 (defn random-midis
@@ -46,12 +54,12 @@
       (take n)
       (into []))))
 
-(defn midi-to-pitch [midi]
+(defn midi-to-abc [midi]
   (Instrument.midiToPitch midi))
 
 (defn midis-to-abc [midis]
   (->> midis
-    (map midi-to-pitch)
+    (map midi-to-abc)
     (into [])))
 
 (defn render-abc [abc id]
@@ -70,15 +78,6 @@
       (assoc-in _ [:answer] [])
       (assoc-in _ [:stage] :guessing)))
 )
-
-(defn get-localstorage-if-exist [window]
-  (aget window "localStorage"))
-
-(defn load-config-from-localstorage []
-  (print "load-config" js/window)
-  (if-let [ls (get-localstorage-if-exist js/window)]
-    (.setItem ls "__music_score_config" "it works!")
-    (print (.getItem ls "__music_score_config"))))
 
 (defn key-press [model midi]
   (print "key-press handler")
@@ -111,7 +110,7 @@
   m))
 
 (defn update-model [[event-type & args] model]
-  (print event-type args)
+  (print "update-model" event-type args)
   (condp = event-type
     :start-game (start-game model)
     :key-press (key-press model (first args))
@@ -129,17 +128,19 @@
 (rum/defc root-component [data]
   [:div {:id "container"}
     [:div {:id "sidebar"}
-      (ui/render-configuration data *input-chan*)]
+      (ui/render-configuration data input-signal)]
     [:div {:id "notation-exercise"}]
     [:div {:id "notation-answer"}]
-    (ui/render-keyboard data *input-chan*)])
+    (ui/render-keyboard data input-signal)])
 
-(defn render-app []
-  (rum/mount (root-component @*app-state*) (. js/document (getElementById "app"))))
+;; here foldp
 
-(async/go
+(defonce state-signal
+         (z/foldp update-model initial-model input-signal))
+
+#_(async/go
   (loop []
-    (let [event (<! *input-chan*)]
+    (let [event (<! input-signal)]
       (swap! *app-state* (partial update-model event))
       (>! *model-chan* @*app-state*)
     (recur))))
@@ -177,17 +178,40 @@
     abc-str))
 
 
+(defn render-app [state]
+  (print "render-app")
+  (let [model state
+        clef (get-in model [:config :key])
+        abc (map midi-to-abc (model :answer))
+        abc-str (add-clef clef (apply str abc))
+        last-key (str (last abc))
+        abc-question-str (add-clef clef (apply str (midis-to-abc (model :question))))]
+    ;; (load-config-from-localstorage)
+    ;; (render-app model)
+    (rum/mount (root-component state) (. js/document (getElementById "app")))
+    (render-abc abc-str "notation-answer")
+    ;; (play-abc last-key)
+    (apply-classes! (check-correctness (model :question) (model :answer)) (query-dom-notes))
+    (render-abc abc-question-str "notation-exercise")))
 
-(async/go
+
+
+(defonce main-signal (z/map render-app state-signal))
+
+
+;; kicks everything off
+(defonce app-state (z/pipe-to-atom main-signal))
+
+#_(async/go
   (loop []
     (let [model (<! *model-chan*)
           clef (get-in model [:config :key])
-          abc (map midi-to-pitch (model :answer))
+          abc (map midi-to-abc (model :answer))
           abc-str (add-clef clef (apply str abc))
           last-key (str (last abc))
           abc-question-str (add-clef clef (apply str (midis-to-abc (model :question))))]
       (load-config-from-localstorage)
-      (render-app)
+      (render-app model)
       (render-abc abc-str "notation-answer")
       (play-abc last-key)
       (apply-classes! (check-correctness (model :question) (model :answer)) (query-dom-notes))
@@ -231,7 +255,7 @@
 
 (defn midi-to-freq [midis]
   (as-> midis _
-    (map midi-to-pitch _)
+    (map midi-to-abc _)
     (apply str _)
     (parse-abc-file _)
     (extract-freq _)))
@@ -243,10 +267,13 @@
     channel))
 
 (defn ^:export main []
-  ;; kickoff
-  (async/go
-  ;;  (<! (async/timeout 5000))
-    (>! *input-chan* [:load-config]))
+  (let [ch (z/to-chan input-signal)]
+    (async/go-loop
+      []
+      (let [[keypress midi] (<! ch)]
+        (print "play!!!!")
+        (play-abc (midi-to-abc midi))
+        (recur)))))
 
 
   ;; try midi
@@ -270,5 +297,5 @@
                   pitch (aget data 1)]
               (when (= type 144)
                 (js/console.log type pitch)
-                (async/put! *input-chan* [:key-press pitch])))))))))
+                (async/put! input-signal [:key-press pitch]))))))))
 (main)
