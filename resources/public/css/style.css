@@ -54,3 +54,15 @@
 .selected-clef {
 	font-weight: bold;
 }
+
+.number-field {
+	padding: 5px 30px;
+	border: 1px solid whitesmoke;
+	user-select: none;
+	-moz-user-select: none;
+	-webkit-user-select: none;
+}
+
+.number-field:hover {
+	cursor: ew-resize;
+}

@@ -2,8 +2,19 @@
 
 (defonce *instrument* (js/Instrument. #js {:wave "piano" :detune 0}))
 
+(defn add-clef [clef abc-str]
+  (if (= clef :bass)
+    (str "K:bass\n" abc-str)
+    abc-str))
+
 (defn midi-to-abc [midi]
   (Instrument.midiToPitch midi))
+
+(defn midi-to-abc-string [midi clef]
+  (->> midi
+    (map midi-to-abc)
+    (apply str)
+    (add-clef clef)))
 
 (defn midis-to-abc [midis]
   (->> midis

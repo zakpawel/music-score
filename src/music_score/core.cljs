@@ -141,23 +141,14 @@
   )
 )
 
-(defn add-clef [clef abc-str]
-  (if (= clef :bass)
-    (str "K:bass\n" abc-str)
-    abc-str))
-
 
 (defn render-app [state]
   (print "render-app")
   (let [clef (get-in state [:config :key])
-        to-abc-string #(->> %
-                            (map abc/midi-to-abc)
-                            (apply str)
-                            (add-clef clef))
         question (state :question)
         answer (state :answer)
-        abc-question (to-abc-string question)
-        abc-answer (to-abc-string answer)]
+        abc-question (abc/midi-to-abc-string question clef)
+        abc-answer (abc/midi-to-abc-string answer clef)]
     (rum/mount (root-component state) (. js/document (getElementById "app")))
     (abc/render-abc abc-answer "notation-answer")
     (->> (query-dom-notes!)
