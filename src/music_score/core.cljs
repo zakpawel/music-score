@@ -18,15 +18,6 @@
                               ----> :mistake
   :stage [:menu :guessing :success :mistake])
 
-;; define your app data so that it doesn't get over-written on reload
-
-(defonce *app-state*
-  (atom {:question []
-         :answer []
-         :stage :guessing
-         :config {:key :bass
-                  :range []}}))
-
 (defonce initial-model
          {:question []
           :answer []
@@ -122,12 +113,6 @@
 (defonce state-signal
          (z/foldp update-model initial-model input-signal))
 
-#_(async/go
-  (loop []
-    (let [event (<! input-signal)]
-      (swap! *app-state* (partial update-model event))
-      (>! *model-chan* @*app-state*)
-    (recur))))
 
 (defn check-correctness [question answer]
   (let [[f & r] (data/diff question answer)
@@ -137,7 +122,7 @@
         (into [] _)))
 )
 
-(defn query-dom-notes []
+(defn query-dom-notes! []
   (let [answer-node (. js/document (getElementById "notation-answer"))
         dom-notes (. answer-node (getElementsByClassName "note"))]
     dom-notes
@@ -164,19 +149,20 @@
 
 (defn render-app [state]
   (print "render-app")
-  (let [model state
-        clef (get-in model [:config :key])
-        abc (map abc/midi-to-abc (model :answer))
-        abc-str (add-clef clef (apply str abc))
-        last-key (str (last abc))
-        abc-question-str (add-clef clef (apply str (abc/midis-to-abc (model :question))))]
-    ;; (load-config-from-localstorage)
-    ;; (render-app model)
+  (let [clef (get-in state [:config :key])
+        to-abc-string #(->> %
+                            (map abc/midi-to-abc)
+                            (apply str)
+                            (add-clef clef))
+        question (state :question)
+        answer (state :answer)
+        abc-question (to-abc-string question)
+        abc-answer (to-abc-string answer)]
     (rum/mount (root-component state) (. js/document (getElementById "app")))
-    (abc/render-abc abc-str "notation-answer")
-    ;; (play-abc last-key)
-    (apply-classes! (check-correctness (model :question) (model :answer)) (query-dom-notes))
-    (abc/render-abc abc-question-str "notation-exercise")))
+    (abc/render-abc abc-answer "notation-answer")
+    (->> (query-dom-notes!)
+         (apply-classes! (check-correctness question answer)))
+    (abc/render-abc abc-question "notation-exercise")))
 
 
 
@@ -185,22 +171,6 @@
 
 ;; kicks everything off
 (defonce app-state (z/pipe-to-atom main-signal))
-
-#_(async/go
-  (loop []
-    (let [model (<! *model-chan*)
-          clef (get-in model [:config :key])
-          abc (map midi-to-abc (model :answer))
-          abc-str (add-clef clef (apply str abc))
-          last-key (str (last abc))
-          abc-question-str (add-clef clef (apply str (midis-to-abc (model :question))))]
-      (load-config-from-localstorage)
-      (render-app model)
-      (render-abc abc-str "notation-answer")
-      (play-abc last-key)
-      (apply-classes! (check-correctness (model :question) (model :answer)) (query-dom-notes))
-      (render-abc abc-question-str "notation-exercise")
-      (recur))))
 
 
 (defn on-js-reload []
