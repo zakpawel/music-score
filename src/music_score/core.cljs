@@ -3,6 +3,7 @@
               [clojure.data :as data]
               [rum]
               [music-score.ui :as ui]
+              [music-score.abc :as abc]
               [jamesmacaulay.zelkova.signal :as z])
     (:require-macros [cljs.core.async.macros :as async]))
 
@@ -40,7 +41,6 @@
 ;; (defonce *model-chan* (async/chan))
 
 (defonce input-signal (z/write-port [:key-press 70]))
-(defonce *instrument* (js/Instrument. #js {:wave "piano" :detune 0}))
 
 (defn random-midis
   ([n] (random-midis n 0 (- 108 21)))
@@ -53,22 +53,6 @@
       ;;(filter odd?)
       (take n)
       (into []))))
-
-(defn midi-to-abc [midi]
-  (Instrument.midiToPitch midi))
-
-(defn midis-to-abc [midis]
-  (->> midis
-    (map midi-to-abc)
-    (into [])))
-
-(defn render-abc [abc id]
-  (let [node (. js/document getElementById id)]
-    (js/ABCJS.renderAbc node abc #js {} #js {:add_classes true})))
-
-(defn play-abc [abc]
-  (let [inst *instrument*]
-    (.play inst abc)))
 
 (defn start-game [model]
   (let [min (get-in model [:config :range 0])
@@ -182,17 +166,17 @@
   (print "render-app")
   (let [model state
         clef (get-in model [:config :key])
-        abc (map midi-to-abc (model :answer))
+        abc (map abc/midi-to-abc (model :answer))
         abc-str (add-clef clef (apply str abc))
         last-key (str (last abc))
-        abc-question-str (add-clef clef (apply str (midis-to-abc (model :question))))]
+        abc-question-str (add-clef clef (apply str (abc/midis-to-abc (model :question))))]
     ;; (load-config-from-localstorage)
     ;; (render-app model)
     (rum/mount (root-component state) (. js/document (getElementById "app")))
-    (render-abc abc-str "notation-answer")
+    (abc/render-abc abc-str "notation-answer")
     ;; (play-abc last-key)
     (apply-classes! (check-correctness (model :question) (model :answer)) (query-dom-notes))
-    (render-abc abc-question-str "notation-exercise")))
+    (abc/render-abc abc-question-str "notation-exercise")))
 
 
 
@@ -235,30 +219,7 @@
                 (str (apply str (repeat (- 0 n) ",")) pitch))))
     (into [])))
 
-(defn parse-abc-file [abc-str]
-  (js/parseABCFile abc-str))
 
-(defn extract-freq [tones]
-  (let [stems (-> tones
-                (aget "voice")
-                (aget "")
-                (aget "stems")
-              )
-        freqs (reduce (fn [acc stem]
-                        (conj acc (reduce (fn [acc note]
-                                  (conj acc (note "frequency")))
-                                #{} (stem "notes"))))
-                      [] (js->clj stems))
-        ]
-    (print freqs)
-    freqs))
-
-(defn midi-to-freq [midis]
-  (as-> midis _
-    (map midi-to-abc _)
-    (apply str _)
-    (parse-abc-file _)
-    (extract-freq _)))
 
 (defn request-web-midi []
   (let [channel (async/chan)
@@ -272,7 +233,7 @@
       []
       (let [[keypress midi] (<! ch)]
         (print "play!!!!")
-        (play-abc (midi-to-abc midi))
+        (abc/play-abc (abc/midi-to-abc midi))
         (recur)))))
 
 
