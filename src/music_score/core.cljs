@@ -2,7 +2,8 @@
     (:require [cljs.core.async :as async]
               [clojure.data :as data]
               [rum]
-              [music-score.ui :as ui])
+              [music-score.ui :as ui]
+              [jamesmacaulay.zelkova.signal :as z])
     (:require-macros [cljs.core.async.macros :as async]))
 
 (enable-console-print!)
@@ -24,8 +25,13 @@
          :stage :guessing
          :config {:key :bass
                   :range []}}))
-(defonce *input-chan* (async/chan))
+(defonce _input-chan (z/write-port 1))
+(print _input-chan)
+(defonce *input-chan* (z/to-chan (z/write-port 1)))
+;; (defonce _input-mult (async/mult _input-chan))
+;; (defonce *input-chan* (async/tap _input-mult (async/chan)))
 (defonce *model-chan* (async/chan))
+
 (defonce *instrument* (js/Instrument. #js {:wave "piano" :detune 0}))
 
 (defn random-midis
@@ -169,6 +175,8 @@
   (if (= clef :bass)
     (str "K:bass\n" abc-str)
     abc-str))
+
+
 
 (async/go
   (loop []
