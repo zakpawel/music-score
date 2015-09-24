@@ -54,7 +54,7 @@
 (defcs number-field <
 	{:did-mount
     (fn [state]
-      (let [value (-> state (:rum/args) (first) (:initial-value))
+      (let [value (-> state (:rum/args) (first) (:value))
             initial-state {:dragging false :value value}
             state-atom (atom initial-state)
             ch (async/chan (async/sliding-buffer 1))
@@ -79,23 +79,13 @@
    :transfer-state
     (fn [old-state state]
       (merge state (select-keys old-state [::internal-state ::drag-chan])))}
-	[state {:keys [on-blur initial-value]} channel]
-    (let [internal (::internal-state state)
-          val (if (-> internal (nil?) (not))
-                (do
-                  #_(print "AAAAAAAAAAAAA" @internal)
-                  (let [value (->> @internal (:value))]
-                    (if value
-                      value
-                      initial-value))
-                  )
-                initial-value)
-          drag-ch (::drag-chan state)]
-      [:label.number-field {#_:on-blur #_on-blur
-               :on-mouse-down (fn [e] (async/put! drag-ch [:drag-start [(.. e -clientX) (.. e -clientY)]])  nil)
+	[state {:keys [on-blur value]} channel]
+    (let [drag-ch (::drag-chan state)]
+      [:label.number-field
+              {:on-mouse-down (fn [e] (async/put! drag-ch [:drag-start [(.. e -clientX) (.. e -clientY)]])  nil)
                :on-mouse-up (fn [e] (async/put! drag-ch [:drag-end [(.. e -clientX) (.. e -clientY)]])  nil)
-               :on-mouse-move (fn [e] (async/put! drag-ch [:mouse-move [(.. e -clientX) (.. e -clientY)]])  nil)
-               #_:on-mouse-out #_(fn [_] (swap! internal assoc :dragging false) (print internal))} initial-value]))
+               :on-mouse-move (fn [e] (async/put! drag-ch [:mouse-move [(.. e -clientX) (.. e -clientY)]])  nil)}
+       value]))
 
 (defn render-key [n oct-num type channel]
   (let [value (+ (+ n 12) (* oct-num 12))]
@@ -132,9 +122,9 @@
 
 (defn render-range-config [low-note high-note clef channel]
   [:div.range-config
-   (number-field {:initial-value low-note  :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])}
+   (number-field {:value low-note  :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])}
                  #(async/put! channel [:config :range 0 %]))
-   (number-field {:initial-value high-note :on-blur #(async/put! channel [:config :range 1 (parse-pitch %)])}
+   (number-field {:value high-note :on-blur #(async/put! channel [:config :range 1 (parse-pitch %)])}
                  #(async/put! channel [:config :range 1 %]))
    (render-notes [low-note high-note] clef)]
   )
@@ -151,8 +141,13 @@
     ))
 
 (defc render-notes <
-  {:did-update
+  {:transfer-state
+   (fn [prev-state state]
+     (print "render-notes" "transfer-state")
+     state)
+   :did-update
    (fn [state]
+     (print "render-notes did-update")
      (let [[midi clef] (-> state (:rum/args))
            node (-> state
                     (:rum/react-component)
@@ -160,5 +155,6 @@
            abc (abc/midi-to-abc-string midi clef)]
        (print "render-notes did-mount" abc node)
        (abc/render-abc abc node)))}
-  [low-note high-note clef]
+      rum/static
+  [midi clef]
   [:div])
