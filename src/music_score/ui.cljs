@@ -42,7 +42,7 @@
                                                       (assoc :start-value (state :value))))
               :mouse-move (if (state :dragging)
                             (-> state
-                                (update :value #(+ (state :start-value) (- x (state :start-x)))))
+                                (update :value #(+ (state :start-value) (- y (state :start-y)))))
                             state)
               :drag-end (do (print "mouseup received") (assoc state :dragging false)))]
     (->> ret (clj->js) (.log js/console "update-state" (str event)))
@@ -61,20 +61,24 @@
 (defcs number-field <
        {:did-mount
         (fn [state]
-          (let [value (-> state (:rum/args) (first) (:value))
+          (let [args (-> state (:rum/args) (first))
+                value (:value args)
+                on-drag-change (:on-drag-change args)
+                on-value-change (:on-value-change args)
                 initial-state {:dragging false :value value}
                 ch (z/write-port [:nothing [0 0]])
                 zzz (z/merge ch drag-channel)
-                out-ch (foldp update-state initial-state (z/to-chan zzz))
-                out-fn (->> state
-                            (:rum/args)
-                            (second))]
+                out-ch (foldp update-state initial-state (z/to-chan zzz))]
             (async/go-loop [old-state initial-state]
                            (let [new-state (<! out-ch)
                                  old-value (:value old-state)
-                                 new-value (:value new-state)]
+                                 new-value (:value new-state)
+                                 old-drag (:dragging old-state)
+                                 new-drag (:dragging new-state)]
                              (when (not= old-value new-value)
-                               (out-fn new-value))
+                               (on-value-change new-value))
+                             (when (not= old-drag new-drag)
+                               (on-drag-change new-drag))
                              (recur new-state)))
             (-> state
                 (assoc ::drag-chan ch))))
@@ -124,10 +128,14 @@
 
 (defn render-range-config [low-note high-note clef channel]
   [:div.range-config.cell
-   (number-field {:value low-note :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])}
-                 #(async/put! channel [:config :range 0 %]))
-   (number-field {:value high-note :on-blur #(async/put! channel [:config :range 1 (parse-pitch %)])}
-                 #(async/put! channel [:config :range 1 %]))
+   (number-field {:value low-note :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])
+                  :on-value-change #(async/put! channel [:config :range 0 %])
+                  :on-drag-change #(async/put! channel [:dragging %])})
+   (number-field {:value high-note
+                  :on-blur #(async/put! channel [:config :range 1 (parse-pitch %)])
+                  :on-value-change #(async/put! channel [:config :range 1 %])
+                  :on-drag-change #(async/put! channel [:dragging %])})
+
    (render-notes [low-note high-note] clef "config")]
   )
 
@@ -208,8 +216,12 @@
   [state input-signal]
     (let [clef (get-in state [:config :key])
           question (state :question)
-          answer (state :answer)]
+          answer (state :answer)
+          dragging (state :dragging)
+          cls (if dragging
+                "dragging" "")]
       [:div {:id            "container"
+             :class         cls
              :on-mouse-move #(do (async/put! drag-channel [:mouse-move (get-evt-coord %)]) nil)
              :on-mouse-up   #(do (print "onmouseup") (async/put! drag-channel [:drag-end (get-evt-coord %)]) nil)
              :on-mouse-leave #(do (print "onmouseleave") (async/put! drag-channel [:drag-end (get-evt-coord %)]) nil)}

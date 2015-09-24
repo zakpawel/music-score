@@ -22,6 +22,7 @@
          {:question []
           :answer []
           :stage :guessing
+          :dragging false
           :config {:key :bass
                    :range [20 30]}})
 
@@ -84,12 +85,16 @@
   (println m)
   m))
 
+(defn handle-drag [model dragging?]
+  (assoc model :dragging dragging?))
+
 (defn update-model [[event-type & args] model]
   (print "update-model" event-type args)
   (condp = event-type
     :start-game (start-game model)
     :key-press (key-press model (first args))
     :config (config model args)
+    :dragging (handle-drag model (first args))
     model
   ))
 
@@ -151,9 +156,10 @@
   (let [ch (z/to-chan input-signal)]
     (async/go-loop
       []
-      (let [[keypress midi] (<! ch)]
-        (print "play!!!!")
-        (abc/play-abc (abc/midi-to-abc midi))
+      (let [[evt midi] (<! ch)]
+        (when (= evt :keypress)
+          (print "play!!!!")
+          (abc/play-abc (abc/midi-to-abc midi)))
         (recur)))))
 
 

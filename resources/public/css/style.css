@@ -1,6 +1,6 @@
 /* some style */
 
-html, body {
+html, body, #app, #container {
 	height: 100%;
 }
 
@@ -8,7 +8,9 @@ body {
 	margin: 0;
 }
 
-#container {
+#container.dragging {
+	height: 100%;
+	cursor: ns-resize;
 	position: relative;
 }
 
@@ -37,6 +39,10 @@ body {
 .clefs {
 	display: table-cell;
 	vertical-align: top;
+	user-select: none;
+	-moz-user-select: none;
+	-webkit-user-select: none;
+
 }
 
 .range-config {
@@ -96,5 +102,5 @@ body {
 }
 
 .number-field:hover {
-	cursor: ew-resize;
+	cursor: ns-resize;
 }
