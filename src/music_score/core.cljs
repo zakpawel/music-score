@@ -23,7 +23,7 @@
           :answer []
           :stage :guessing
           :config {:key :bass
-                   :range []}})
+                   :range [20 30]}})
 
 ;; (defonce _input-chan (z/write-port 1))
 ;; (defonce input-signal (z/to-chan (z/write-port 1)))
@@ -149,11 +149,12 @@
         answer (state :answer)
         abc-question (abc/midi-to-abc-string question clef)
         abc-answer (abc/midi-to-abc-string answer clef)]
+    (print "render-app" abc-question)
     (rum/mount (root-component state) (. js/document (getElementById "app")))
-    (abc/render-abc abc-answer "notation-answer")
+    (abc/render-abc-id abc-answer "notation-answer")
     (->> (query-dom-notes!)
          (apply-classes! (check-correctness question answer)))
-    (abc/render-abc abc-question "notation-exercise")))
+    (abc/render-abc-id abc-question "notation-exercise")))
 
 
 

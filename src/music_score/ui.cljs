@@ -28,7 +28,6 @@
 
 
 (defn update-state [state [event [x y]]]
-  (print state event x y)
   (let [ret (condp = event
               :drag-start (-> state
                               (assoc :dragging true)
@@ -40,7 +39,7 @@
                                 (update :value #(+ (state :start-value) (- x (state :start-x)))))
                             state)
               :drag-end (assoc state :dragging false))]
-    (->> ret (clj->js) (.log js/console "update-state"))
+    #_(->> ret (clj->js) (.log js/console "update-state"))
     ret))
 
 (defn foldp [f init ch]
@@ -55,53 +54,48 @@
 (defcs number-field <
 	{:did-mount
     (fn [state]
-      (let [initial-state {:dragging false}
+      (let [value (-> state (:rum/args) (first) (:initial-value))
+            initial-state {:dragging false :value value}
             state-atom (atom initial-state)
             ch (async/chan (async/sliding-buffer 1))
-            out-ch (foldp update-state initial-state ch)]
+            out-ch (foldp update-state initial-state ch)
+            out (->> state
+                     (:rum/args)
+                     (second))]
+        (add-watch state-atom :watcher (fn [key atom old-state new-state]
+                                         (let [old-value (:value old-state)
+                                               new-value (:value new-state)]
+                                         (when (not= old-value new-value)
+                                           (out new-value)
+                                           #_(rum/request-render (:rum/react-component state))
+                                           (print "changed" (new-state :value))))))
         (async/go-loop []
           (let [new-state (<! out-ch)]
             (reset! state-atom new-state)
-            (rum/request-render (:rum/react-component state))
             (recur)))
         (-> state
             (assoc ::internal-state state-atom)
             (assoc ::drag-chan ch))))
    :transfer-state
     (fn [old-state state]
-      (merge state (select-keys old-state [::internal-state ::drag-chan])))
-   :did-update
-	 	(fn [state]
-      (let [xxx (->> state
-                     (::internal-state)
-                     (deref)
-                     (:value))
-            abc (abc/midi-to-abc-string [xxx] :treble)]
-        (print "abc is: " abc)
-        (abc/render-abc abc "placeholder"))
-      #_(->> state (clj->js) (.log js/console "did-update"))
-      state
-	 		#_(let [input (-> state
-				 						(:rum/react-component)
-				 						(.getDOMNode))
-            local (-> state (::internal-state))
-            value (-> state (:rum/args) (first) (:value))]
-				(aset input "value" (str value))))}
-	[state {:keys [on-blur value]}]
+      (merge state (select-keys old-state [::internal-state ::drag-chan])))}
+	[state {:keys [on-blur initial-value]} channel]
     (let [internal (::internal-state state)
-          val (if internal
-                (->> @internal (:value) (str))
-                0)
+          val (if (-> internal (nil?) (not))
+                (do
+                  #_(print "AAAAAAAAAAAAA" @internal)
+                  (let [value (->> @internal (:value))]
+                    (if value
+                      value
+                      initial-value))
+                  )
+                initial-value)
           drag-ch (::drag-chan state)]
-      #_(print "number-field value==" value val)
-      (if internal
-        (->> @internal (clj->js) (.log js/console "number-field render"))
-        (.log js/console "number-field render internal==null"))
       [:label.number-field {#_:on-blur #_on-blur
                :on-mouse-down (fn [e] (async/put! drag-ch [:drag-start [(.. e -clientX) (.. e -clientY)]])  nil)
                :on-mouse-up (fn [e] (async/put! drag-ch [:drag-end [(.. e -clientX) (.. e -clientY)]])  nil)
                :on-mouse-move (fn [e] (async/put! drag-ch [:mouse-move [(.. e -clientX) (.. e -clientY)]])  nil)
-               #_:on-mouse-out #_(fn [_] (swap! internal assoc :dragging false) (print internal))} val]))
+               #_:on-mouse-out #_(fn [_] (swap! internal assoc :dragging false) (print internal))} initial-value]))
 
 (defn render-key [n oct-num type channel]
   (let [value (+ (+ n 12) (* oct-num 12))]
@@ -134,20 +128,37 @@
         (first x)
     ))
 
-(defn render-range-config [low-note high-note channel]
+(declare render-notes)
+
+(defn render-range-config [low-note high-note clef channel]
   [:div.range-config
-   (number-field {:value low-note  :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])})
-   (number-field {:value high-note :on-blur #(async/put! channel [:config :range 1 (parse-pitch %)])})
-   [:div#placeholder]]
+   (number-field {:initial-value low-note  :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])}
+                 #(async/put! channel [:config :range 0 %]))
+   (number-field {:initial-value high-note :on-blur #(async/put! channel [:config :range 1 (parse-pitch %)])}
+                 #(async/put! channel [:config :range 1 %]))
+   (render-notes [low-note high-note] clef)]
   )
 
 (defn render-configuration [model channel]
   (let [clef (get-in model [:config :key])
         switch {true "selected-clef" false ""}
-        low-note (-> (get-in model [:config :range 0]) str)
-        high-note (-> (get-in model [:config :range 1]) str)]
+        low-note (-> model (get-in [:config :range 0]))
+        high-note (-> model (get-in [:config :range 1]))]
         [:div
           [:div {:class (switch (= :bass clef))   :on-click #(async/put! channel [:config :key :bass])} "K:bass"]
           [:div {:class (switch (= :treble clef)) :on-click #(async/put! channel [:config :key :treble])} "K:treble"]
-          (render-range-config low-note high-note channel)]
+          (render-range-config low-note high-note clef channel)]
     ))
+
+(defc render-notes <
+  {:did-update
+   (fn [state]
+     (let [[midi clef] (-> state (:rum/args))
+           node (-> state
+                    (:rum/react-component)
+                    (.getDOMNode))
+           abc (abc/midi-to-abc-string midi clef)]
+       (print "render-notes did-mount" abc node)
+       (abc/render-abc abc node)))}
+  [low-note high-note clef]
+  [:div])

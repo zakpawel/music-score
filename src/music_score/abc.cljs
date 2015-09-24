@@ -21,9 +21,12 @@
        (map midi-to-abc)
        (into [])))
 
-(defn render-abc [abc id]
-  (let [node (. js/document getElementById id)]
-    (js/ABCJS.renderAbc node abc #js {} #js {:add_classes true})))
+
+(defn render-abc [abc node]
+  (js/ABCJS.renderAbc node abc #js {} #js {:add_classes true}))
+
+(defn render-abc-id [abc id]
+  (render-abc abc (. js/document getElementById id)))
 
 (defn play-abc [abc]
   (let [inst *instrument*]
