@@ -140,11 +140,42 @@
           (render-range-config low-note high-note clef channel)]
     ))
 
+(defn check-correctness [question answer]
+  (let [[f & r] (data/diff question answer)
+        full (take (count question) (concat f (repeat nil)))]
+    (as-> full _
+          (map #(if (nil? %) "correct" "error") _)
+          (into [] _)))
+  )
+
+(defn query-dom-notes! []
+  (let [answer-node (. js/document (getElementById "answer"))
+        dom-notes (. answer-node (getElementsByClassName "note"))]
+    dom-notes
+    )
+  )
+
+(extend-type js/HTMLCollection
+  ISeqable
+  (-seq [array] (array-seq array 0)))
+
+(defn apply-classes! [classes dom-notes]
+  (doseq [[clazz note] (map vector classes dom-notes)]
+    (let [cls (. note (getAttribute "class"))]
+      (. note (setAttribute "class" (str cls " " clazz)))
+      )
+    )
+  )
+
 (defc render-exercise <
   rum/static
   {:did-update
    (fn [state]
-     
+     (print "render-exercise did-update")
+     (let [question (-> state (:rum/args) (first))
+           answer (-> state (:rum/args) (second))]
+       (->> (query-dom-notes!)
+            (apply-classes! (check-correctness question answer))))
      state)}
   [question answer clef]
     [:div

@@ -116,34 +116,6 @@
          (z/foldp update-model initial-model input-signal))
 
 
-(defn check-correctness [question answer]
-  (let [[f & r] (data/diff question answer)
-        full (take (count question) (concat f (repeat nil)))]
-    (as-> full _
-        (map #(if (nil? %) "correct" "error") _)
-        (into [] _)))
-)
-
-(defn query-dom-notes! []
-  (let [answer-node (. js/document (getElementById "notation-answer"))
-        dom-notes (. answer-node (getElementsByClassName "note"))]
-    dom-notes
-  )
-)
-
-(extend-type js/HTMLCollection
-  ISeqable
-  (-seq [array] (array-seq array 0)))
-
-(defn apply-classes! [classes dom-notes]
-  (doseq [[clazz note] (map vector classes dom-notes)]
-    (let [cls (. note (getAttribute "class"))]
-      (. note (setAttribute "class" (str cls " " clazz)))
-    )
-  )
-)
-
-
 (defn render-app [state]
   (let [clef (get-in state [:config :key])
         question (state :question)
