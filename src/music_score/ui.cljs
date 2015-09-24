@@ -126,7 +126,7 @@
                  #(async/put! channel [:config :range 0 %]))
    (number-field {:value high-note :on-blur #(async/put! channel [:config :range 1 (parse-pitch %)])}
                  #(async/put! channel [:config :range 1 %]))
-   (render-notes [low-note high-note] clef)]
+   (render-notes [low-note high-note] clef "config")]
   )
 
 (defn render-configuration [model channel]
@@ -140,21 +140,32 @@
           (render-range-config low-note high-note clef channel)]
     ))
 
-(defc render-notes <
-  {:transfer-state
-   (fn [prev-state state]
-     (print "render-notes" "transfer-state")
-     state)
-   :did-update
+(defc render-exercise <
+  rum/static
+  {:did-update
    (fn [state]
-     (print "render-notes did-update")
-     (let [[midi clef] (-> state (:rum/args))
-           node (-> state
-                    (:rum/react-component)
-                    (.getDOMNode))
-           abc (abc/midi-to-abc-string midi clef)]
-       (print "render-notes did-mount" abc node)
-       (abc/render-abc abc node)))}
-      rum/static
-  [midi clef]
-  [:div])
+     
+     state)}
+  [question answer clef]
+    [:div
+      (render-notes question clef "question")
+      (render-notes answer clef "answer")])
+
+(defc render-notes <
+      {:should-update
+       (fn [old-state new-state]
+         (let [neq (not= (:rum/args old-state) (:rum/args new-state))]
+           (print "render-notes should-update" neq (-> old-state (:rum/args)) (-> new-state (:rum/args)))
+           neq))
+       :did-update
+       (fn [state]
+         (let [[midi clef] (-> state (:rum/args))
+               node (-> state
+                        (:rum/react-component)
+                        (.getDOMNode))
+               abc (abc/midi-to-abc-string midi clef)]
+           (print "render-notes did-update" (-> state (:rum/args)))
+           (abc/render-abc abc node)
+           state))}
+  [midi clef id]
+  [:div {:id id}])

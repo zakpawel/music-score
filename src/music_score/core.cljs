@@ -100,13 +100,15 @@
   ))
 
 
-(rum/defc root-component [data]
-  [:div {:id "container"}
-    [:div {:id "sidebar"}
-      (ui/render-configuration data input-signal)]
-    [:div {:id "notation-exercise"}]
-    [:div {:id "notation-answer"}]
-    (ui/render-keyboard data input-signal)])
+(rum/defc root-component [state]
+  (let [clef (get-in state [:config :key])
+        question (state :question)
+        answer (state :answer)]
+    [:div {:id "container"}
+     [:div {:id "sidebar"}
+      (ui/render-configuration state input-signal)]
+     (ui/render-exercise question answer clef)
+     (ui/render-keyboard state input-signal)]))
 
 ;; here foldp
 
@@ -143,7 +145,6 @@
 
 
 (defn render-app [state]
-  (print "render-app")
   (let [clef (get-in state [:config :key])
         question (state :question)
         answer (state :answer)
@@ -151,10 +152,10 @@
         abc-answer (abc/midi-to-abc-string answer clef)]
     (print "render-app" abc-question)
     (rum/mount (root-component state) (. js/document (getElementById "app")))
-    (abc/render-abc-id abc-answer "notation-answer")
-    (->> (query-dom-notes!)
+    #_(abc/render-abc-id abc-answer "notation-answer")
+    #_(->> (query-dom-notes!)
          (apply-classes! (check-correctness question answer)))
-    (abc/render-abc-id abc-question "notation-exercise")))
+    #_(abc/render-abc-id abc-question "notation-exercise")))
 
 
 
