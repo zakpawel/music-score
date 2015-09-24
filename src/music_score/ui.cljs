@@ -81,7 +81,7 @@
       (merge state (select-keys old-state [::internal-state ::drag-chan])))}
 	[state {:keys [on-blur value]} channel]
     (let [drag-ch (::drag-chan state)]
-      [:label.number-field
+      [:div.number-field
               {:on-mouse-down (fn [e] (async/put! drag-ch [:drag-start [(.. e -clientX) (.. e -clientY)]])  nil)
                :on-mouse-up (fn [e] (async/put! drag-ch [:drag-end [(.. e -clientX) (.. e -clientY)]])  nil)
                :on-mouse-move (fn [e] (async/put! drag-ch [:mouse-move [(.. e -clientX) (.. e -clientY)]])  nil)}
@@ -90,7 +90,7 @@
 (defn render-key [n oct-num type channel]
   (let [value (+ (+ n 12) (* oct-num 12))]
     (if (= type :white)
-    	[:div  {:class "key white"
+    	[:div {:class "key white"
          		:on-click #(async/put! channel [:key-press value])}]
         [:div {:class "key black"
          	   :style {:left (str (* n 12) "px")}
@@ -121,8 +121,8 @@
 (declare render-notes)
 
 (defn render-range-config [low-note high-note clef channel]
-  [:div.range-config
-   (number-field {:value low-note  :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])}
+  [:div.range-config.cell
+   (number-field {:value low-note :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])}
                  #(async/put! channel [:config :range 0 %]))
    (number-field {:value high-note :on-blur #(async/put! channel [:config :range 1 (parse-pitch %)])}
                  #(async/put! channel [:config :range 1 %]))
@@ -134,9 +134,10 @@
         switch {true "selected-clef" false ""}
         low-note (-> model (get-in [:config :range 0]))
         high-note (-> model (get-in [:config :range 1]))]
-        [:div
+        [:div.config
+         [:div.clefs.cell
           [:div {:class (switch (= :bass clef))   :on-click #(async/put! channel [:config :key :bass])} "K:bass"]
-          [:div {:class (switch (= :treble clef)) :on-click #(async/put! channel [:config :key :treble])} "K:treble"]
+          [:div {:class (switch (= :treble clef)) :on-click #(async/put! channel [:config :key :treble])} "K:treble"]]
           (render-range-config low-note high-note clef channel)]
     ))
 

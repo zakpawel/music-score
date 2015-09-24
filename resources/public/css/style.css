@@ -18,6 +18,23 @@
 #sidebar {
 }
 
+.config {
+	display: table;
+}
+
+.config .cell {
+	padding: 5px;
+}
+
+.clefs {
+	display: table-cell;
+	vertical-align: top;
+}
+
+.range-config {
+	display: table-cell;
+}
+
 .error {
 	fill: red;
 }
@@ -31,10 +48,14 @@
 	position: relative;
 }
 
+
 .key {
 	display: inline-block;
 	vertical-align: top;
 	box-sizing: border-box;
+	user-select: none;
+	-moz-user-select: none;
+	-webkit-user-select: none;
 }
 
 .key.black {
@@ -56,7 +77,10 @@
 }
 
 .number-field {
+	display: inline-block;
 	padding: 5px 30px;
+	width: 60px;
+	text-align: center;
 	border: 1px solid whitesmoke;
 	user-select: none;
 	-moz-user-select: none;
