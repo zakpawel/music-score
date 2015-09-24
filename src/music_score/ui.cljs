@@ -2,13 +2,16 @@
     (:require [cljs.core.async :as async]
               [clojure.data :as data]
               [music-score.abc :as abc]
-              [rum])
+              [rum]
+              [jamesmacaulay.zelkova.signal :as z])
     (:require-macros
       [music-score.utils :refer [debug]]
       [cljs.core.async.macros :as async]
       [rum :refer [defc defcs]]))
 
 (enable-console-print!)
+
+(defonce drag-channel (z/write-port [:nothing [0 0]])#_(async/chan (async/sliding-buffer 1)))
 
 (def octave-keys
   [:white
@@ -27,19 +30,22 @@
 #_(debug (+ 2 2))
 
 
+(defn get-evt-coord [e]
+  [(.. e -clientX) (.. e -clientY)])
+
 (defn update-state [state [event [x y]]]
   (let [ret (condp = event
-              :drag-start (-> state
-                              (assoc :dragging true)
-                              (assoc :start-x x)
-                              (assoc :start-y y)
-                              (assoc :start-value (state :value)))
+              :drag-start (do (print "mousedown received") (-> state
+                                                      (assoc :dragging true)
+                                                      (assoc :start-x x)
+                                                      (assoc :start-y y)
+                                                      (assoc :start-value (state :value))))
               :mouse-move (if (state :dragging)
                             (-> state
                                 (update :value #(+ (state :start-value) (- x (state :start-x)))))
                             state)
-              :drag-end (assoc state :dragging false))]
-    #_(->> ret (clj->js) (.log js/console "update-state"))
+              :drag-end (do (print "mouseup received") (assoc state :dragging false)))]
+    (->> ret (clj->js) (.log js/console "update-state" (str event)))
     ret))
 
 (defn foldp [f init ch]
@@ -51,41 +57,37 @@
         (recur new-st)))
     out))
 
+
 (defcs number-field <
-	{:did-mount
-    (fn [state]
-      (let [value (-> state (:rum/args) (first) (:value))
-            initial-state {:dragging false :value value}
-            state-atom (atom initial-state)
-            ch (async/chan (async/sliding-buffer 1))
-            out-ch (foldp update-state initial-state ch)
-            out (->> state
-                     (:rum/args)
-                     (second))]
-        (add-watch state-atom :watcher (fn [key atom old-state new-state]
-                                         (let [old-value (:value old-state)
-                                               new-value (:value new-state)]
-                                         (when (not= old-value new-value)
-                                           (out new-value)
-                                           #_(rum/request-render (:rum/react-component state))
-                                           (print "changed" (new-state :value))))))
-        (async/go-loop []
-          (let [new-state (<! out-ch)]
-            (reset! state-atom new-state)
-            (recur)))
-        (-> state
-            (assoc ::internal-state state-atom)
-            (assoc ::drag-chan ch))))
-   :transfer-state
-    (fn [old-state state]
-      (merge state (select-keys old-state [::internal-state ::drag-chan])))}
-	[state {:keys [on-blur value]} channel]
-    (let [drag-ch (::drag-chan state)]
-      [:div.number-field
-              {:on-mouse-down (fn [e] (async/put! drag-ch [:drag-start [(.. e -clientX) (.. e -clientY)]])  nil)
-               :on-mouse-up (fn [e] (async/put! drag-ch [:drag-end [(.. e -clientX) (.. e -clientY)]])  nil)
-               :on-mouse-move (fn [e] (async/put! drag-ch [:mouse-move [(.. e -clientX) (.. e -clientY)]])  nil)}
-       (abc/midi-to-abc value)]))
+       {:did-mount
+        (fn [state]
+          (let [value (-> state (:rum/args) (first) (:value))
+                initial-state {:dragging false :value value}
+                ch (z/write-port [:nothing [0 0]])
+                zzz (z/merge ch drag-channel)
+                out-ch (foldp update-state initial-state (z/to-chan zzz))
+                out-fn (->> state
+                            (:rum/args)
+                            (second))]
+            (async/go-loop [old-state initial-state]
+                           (let [new-state (<! out-ch)
+                                 old-value (:value old-state)
+                                 new-value (:value new-state)]
+                             (when (not= old-value new-value)
+                               (out-fn new-value))
+                             (recur new-state)))
+            (-> state
+                (assoc ::drag-chan ch))))
+        :transfer-state
+        (fn [old-state state]
+          (merge state (select-keys old-state [::drag-chan])))}
+       [state {:keys [on-blur value]} channel]
+       (let [drag-ch (::drag-chan state)]
+         [:div.number-field
+          {:on-mouse-down (fn [e] (print "mousedown" value) (async/put! drag-ch [:drag-start (get-evt-coord e)]) nil)
+           #_:on-mouse-up #_(fn [e] (async/put! drag-ch [:drag-end (get-evt-coord e)]) nil)
+           #_:on-mouse-move #_(fn [e] (async/put! drag-channel [:mouse-move (get-evt-coord e)]) nil)}
+          (abc/midi-to-abc value)]))
 
 (defn render-key [n oct-num type channel]
   (let [value (+ (+ n 12) (* oct-num 12))]
@@ -201,3 +203,17 @@
            state))}
   [midi clef id]
   [:div {:id id}])
+
+(rum/defc root-component
+  [state input-signal]
+    (let [clef (get-in state [:config :key])
+          question (state :question)
+          answer (state :answer)]
+      [:div {:id            "container"
+             :on-mouse-move #(do (async/put! drag-channel [:mouse-move (get-evt-coord %)]) nil)
+             :on-mouse-up   #(do (print "onmouseup") (async/put! drag-channel [:drag-end (get-evt-coord %)]) nil)
+             :on-mouse-leave #(do (print "onmouseleave") (async/put! drag-channel [:drag-end (get-evt-coord %)]) nil)}
+       [:div {:id "sidebar"}
+        (render-configuration state input-signal)]
+       (render-exercise question answer clef)
+       (render-keyboard state input-signal)]))

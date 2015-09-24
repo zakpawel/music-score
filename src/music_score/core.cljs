@@ -99,17 +99,6 @@
     (str min " " max)
   ))
 
-
-(rum/defc root-component [state]
-  (let [clef (get-in state [:config :key])
-        question (state :question)
-        answer (state :answer)]
-    [:div {:id "container"}
-     [:div {:id "sidebar"}
-      (ui/render-configuration state input-signal)]
-     (ui/render-exercise question answer clef)
-     (ui/render-keyboard state input-signal)]))
-
 ;; here foldp
 
 (defonce state-signal
@@ -123,7 +112,7 @@
         abc-question (abc/midi-to-abc-string question clef)
         abc-answer (abc/midi-to-abc-string answer clef)]
     (print "render-app" abc-question)
-    (rum/mount (root-component state) (. js/document (getElementById "app")))))
+    (rum/mount (ui/root-component state input-signal) (. js/document (getElementById "app")))))
 
 
 
