@@ -12,4 +12,5 @@ pom.xml
 .repl
 .nrepl-port
 .idea/
+.DS_Store
 music_score.iml
