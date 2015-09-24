@@ -123,11 +123,7 @@
         abc-question (abc/midi-to-abc-string question clef)
         abc-answer (abc/midi-to-abc-string answer clef)]
     (print "render-app" abc-question)
-    (rum/mount (root-component state) (. js/document (getElementById "app")))
-    #_(abc/render-abc-id abc-answer "notation-answer")
-    #_(->> (query-dom-notes!)
-         (apply-classes! (check-correctness question answer)))
-    #_(abc/render-abc-id abc-question "notation-exercise")))
+    (rum/mount (root-component state) (. js/document (getElementById "app")))))
 
 
 
