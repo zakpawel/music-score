@@ -29,24 +29,36 @@
 
 #_(debug (+ 2 2))
 
+(extend-type js/HTMLCollection
+  ISeqable
+  (-seq [array] (array-seq array 0)))
 
 (defn get-evt-coord [e]
   [(.. e -clientX) (.. e -clientY)])
 
-(defn update-state [state [event [x y]]]
-  (let [ret (condp = event
-              :drag-start (do (print "mousedown received") (-> state
-                                                      (assoc :dragging true)
-                                                      (assoc :start-x x)
-                                                      (assoc :start-y y)
-                                                      (assoc :start-value (state :value))))
-              :mouse-move (if (state :dragging)
-                            (-> state
-                                (update :value #(+ (state :start-value) (- y (state :start-y)))))
-                            state)
-              :drag-end (do (print "mouseup received") (assoc state :dragging false)))]
-    (->> ret (clj->js) (.log js/console "update-state" (str event)))
-    ret))
+
+(defn mk-update-state [key]
+  (fn update-state [state [event [x y] mkey]]
+    (let [ret (condp = event
+                :drag-start (if (= key mkey) (do
+                                               #_(print "mousedown received")
+                                               (-> state
+                                                   (assoc :dragging true)
+                                                   (assoc :start-x x)
+                                                   (assoc :start-y y)
+                                                   (assoc :start-value (state :value))))
+                                             state)
+                :mouse-move (if (state :dragging)
+                              (-> state
+                                  (update :value #(- (state :start-value) (- y (state :start-y)))))
+                              state)
+                :drag-end (do
+                            #_(print "mouseup received")
+                            (assoc state :dragging false)))]
+      (->> ret
+           (clj->js)
+           #_(.log js/console "update-state" (str event)))
+      ret)))
 
 (defn foldp [f init ch]
   (let [out (async/chan)]
@@ -63,12 +75,11 @@
         (fn [state]
           (let [args (-> state (:rum/args) (first))
                 value (:value args)
+                key (:key args)
                 on-drag-change (:on-drag-change args)
                 on-value-change (:on-value-change args)
                 initial-state {:dragging false :value value}
-                ch (z/write-port [:nothing [0 0]])
-                zzz (z/merge ch drag-channel)
-                out-ch (foldp update-state initial-state (z/to-chan zzz))]
+                out-ch (foldp (mk-update-state key) initial-state (z/to-chan drag-channel))]
             (async/go-loop [old-state initial-state]
                            (let [new-state (<! out-ch)
                                  old-value (:value old-state)
@@ -80,17 +91,18 @@
                              (when (not= old-drag new-drag)
                                (on-drag-change new-drag))
                              (recur new-state)))
-            (-> state
-                (assoc ::drag-chan ch))))
+            #_(-> state
+                (assoc ::drag-chan ch))
+            state))
         :transfer-state
         (fn [old-state state]
           (merge state (select-keys old-state [::drag-chan])))}
-       [state {:keys [on-blur value]} channel]
+       [state {:keys [on-blur value key]} channel]
        (let [drag-ch (::drag-chan state)]
          [:div.number-field
-          {:on-mouse-down (fn [e] (print "mousedown" value) (async/put! drag-ch [:drag-start (get-evt-coord e)]) nil)
-           #_:on-mouse-up #_(fn [e] (async/put! drag-ch [:drag-end (get-evt-coord e)]) nil)
-           #_:on-mouse-move #_(fn [e] (async/put! drag-channel [:mouse-move (get-evt-coord e)]) nil)}
+          {:on-mouse-down (fn [e]
+                            (print "mousedown" value)
+                            (async/put! drag-channel [:drag-start (get-evt-coord e) key]) nil)}
           (abc/midi-to-abc value)]))
 
 (defn render-key [n oct-num type channel]
@@ -125,18 +137,43 @@
     ))
 
 (declare render-notes)
+(declare query-dom-notes)
+
+(defc render-range-notes <
+      {:did-update
+       (fn [state]
+         (let [node (->> state
+                         (:rum/react-component)
+                         (.getDOMNode))
+               notes (query-dom-notes node)
+               low (first notes)
+               high (second notes)
+               add-handler (fn [el key]
+                             (when el
+                               (.addEventListener (.-nextSibling el) "mousedown"
+                                                  (fn [e]
+                                                    (do
+                                                      (async/put! drag-channel [:drag-start (get-evt-coord e) key])) nil))))]
+           (add-handler low :low)
+           (add-handler high :high)
+           state
+           ))}
+  [low-note high-note clef]
+  (render-notes [low-note high-note] clef "config"))
 
 (defn render-range-config [low-note high-note clef channel]
   [:div.range-config.cell
    (number-field {:value low-note :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])
+                  :key :low
                   :on-value-change #(async/put! channel [:config :range 0 %])
                   :on-drag-change #(async/put! channel [:dragging %])})
    (number-field {:value high-note
+                  :key :high
                   :on-blur #(async/put! channel [:config :range 1 (parse-pitch %)])
                   :on-value-change #(async/put! channel [:config :range 1 %])
                   :on-drag-change #(async/put! channel [:dragging %])})
 
-   (render-notes [low-note high-note] clef "config")]
+   (render-range-notes low-note high-note clef)]
   )
 
 (defn render-configuration [model channel]
@@ -159,16 +196,12 @@
           (into [] _)))
   )
 
-(defn query-dom-notes! []
-  (let [answer-node (. js/document (getElementById "answer"))
-        dom-notes (. answer-node (getElementsByClassName "note"))]
-    dom-notes
-    )
-  )
+(defn query-dom-notes [node]
+  (let [dom-notes (. node (getElementsByClassName "note"))]
+    dom-notes))
 
-(extend-type js/HTMLCollection
-  ISeqable
-  (-seq [array] (array-seq array 0)))
+(defn query-dom-notes! []
+  (query-dom-notes (. js/document (getElementById "answer"))))
 
 (defn apply-classes! [classes dom-notes]
   (doseq [[clazz note] (map vector classes dom-notes)]
@@ -193,6 +226,17 @@
       (render-notes question clef "question")
       (render-notes answer clef "answer")])
 
+
+(defn render-abc [state lifecycle]
+  (let [[midi clef] (-> state (:rum/args))
+        node (-> state
+                 (:rum/react-component)
+                 (.getDOMNode))
+        abc (abc/midi-to-abc-string midi clef)]
+    (print "render-note" lifecycle (-> state (:rum/args)))
+    (abc/render-abc abc node)
+    state))
+
 (defc render-notes <
       {:should-update
        (fn [old-state new-state]
@@ -201,14 +245,12 @@
            neq))
        :did-update
        (fn [state]
-         (let [[midi clef] (-> state (:rum/args))
-               node (-> state
-                        (:rum/react-component)
-                        (.getDOMNode))
-               abc (abc/midi-to-abc-string midi clef)]
-           (print "render-notes did-update" (-> state (:rum/args)))
-           (abc/render-abc abc node)
-           state))}
+         (render-abc state "did-update")
+         state)
+       :did-mount
+       (fn [state]
+         (render-abc state "did-mount")
+         state)}
   [midi clef id]
   [:div {:id id}])
 

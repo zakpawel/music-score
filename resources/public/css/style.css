@@ -28,6 +28,10 @@ body {
 #sidebar {
 }
 
+svg .note + rect {
+	cursor: ns-resize;
+}
+
 .config {
 	display: table;
 }

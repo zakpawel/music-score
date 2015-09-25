@@ -157,7 +157,7 @@
     (async/go-loop
       []
       (let [[evt midi] (<! ch)]
-        (when (= evt :keypress)
+        (when (= evt :key-press)
           (print "play!!!!")
           (abc/play-abc (abc/midi-to-abc midi)))
         (recur)))))
