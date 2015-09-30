@@ -11,7 +11,8 @@
 
 (enable-console-print!)
 
-(defonce drag-channel (z/write-port [:nothing [0 0]])#_(async/chan (async/sliding-buffer 1)))
+(defonce drag-channel (z/write-port [:nothing [0 0]]))
+
 
 (def octave-keys
   [:white
@@ -50,7 +51,7 @@
                                              state)
                 :mouse-move (if (state :dragging)
                               (-> state
-                                  (update :value #(- (state :start-value) (- y (state :start-y)))))
+                                  (update :value #(- (state :start-value) (Math/floor (* 0.45 (- y (state :start-y)))))))
                               state)
                 :drag-end (do
                             #_(print "mouseup received")
@@ -91,19 +92,16 @@
                              (when (not= old-drag new-drag)
                                (on-drag-change new-drag))
                              (recur new-state)))
-            #_(-> state
-                (assoc ::drag-chan ch))
             state))
         :transfer-state
         (fn [old-state state]
           (merge state (select-keys old-state [::drag-chan])))}
-       [state {:keys [on-blur value key]} channel]
-       (let [drag-ch (::drag-chan state)]
-         [:div.number-field
-          {:on-mouse-down (fn [e]
-                            (print "mousedown" value)
-                            (async/put! drag-channel [:drag-start (get-evt-coord e) key]) nil)}
-          (abc/midi-to-abc value)]))
+ [state {:keys [on-blur value key]} channel]
+ [:div.number-field
+  {:on-mouse-down (fn [e]
+                    (print "mousedown" value)
+                    (async/put! drag-channel [:drag-start (get-evt-coord e) key]) nil)}
+  (abc/midi-to-abc value)])
 
 (defn render-key [n oct-num type channel]
   (let [value (+ (+ n 12) (* oct-num 12))]
@@ -150,10 +148,11 @@
                high (second notes)
                add-handler (fn [el key]
                              (when el
-                               (.addEventListener (.-nextSibling el) "mousedown"
-                                                  (fn [e]
-                                                    (do
-                                                      (async/put! drag-channel [:drag-start (get-evt-coord e) key])) nil))))]
+                               (.addEventListener
+                                 (.-nextSibling el)
+                                 "mousedown"
+                                 (fn [e]
+                                   (async/put! drag-channel [:drag-start (get-evt-coord e) key]) nil))))]
            (add-handler low :low)
            (add-handler high :high)
            state
@@ -189,19 +188,15 @@
     ))
 
 (defn check-correctness [question answer]
-  (let [[f & r] (data/diff question answer)
-        full (take (count question) (concat f (repeat nil)))]
-    (as-> full _
-          (map #(if (nil? %) "correct" "error") _)
-          (into [] _)))
-  )
+  (->> (map (fn [q a]
+              (if (= q a)
+                "correct"
+                "error")) question answer)
+       (into [])))
 
 (defn query-dom-notes [node]
   (let [dom-notes (. node (getElementsByClassName "note"))]
     dom-notes))
-
-(defn query-dom-notes! []
-  (query-dom-notes (. js/document (getElementById "answer"))))
 
 (defn apply-classes! [classes dom-notes]
   (doseq [[clazz note] (map vector classes dom-notes)]
@@ -213,27 +208,45 @@
 
 (defc render-exercise <
   rum/static
-  {:did-update
-   (fn [state]
-     (print "render-exercise did-update")
-     (let [question (-> state (:rum/args) (first))
-           answer (-> state (:rum/args) (second))]
-       (->> (query-dom-notes!)
-            (apply-classes! (check-correctness question answer))))
-     state)}
+      {:did-update
+       (fn [state]
+         (print "render-exercise did-update")
+         (let [[question answer] (-> state (:rum/args))]
+           (->> (query-dom-notes (. js/document (getElementById "exercise")))
+                (apply-classes! (check-correctness question answer))))
+         state)}
   [question answer clef]
-    [:div
-      (render-notes question clef "question")
-      (render-notes answer clef "answer")])
+      (let [merged (->> (map vector question (concat answer (repeat nil))) (into []))]
+        (print "render-exercise render" merged question)
+        [:div
+         (render-notes merged clef "exercise")
+         #_(render-notes answer clef "answer")]))
 
+
+(defn printr [e]
+  (print e)
+  e)
 
 (defn render-abc [state lifecycle]
   (let [[midi clef] (-> state (:rum/args))
         node (-> state
                  (:rum/react-component)
                  (.getDOMNode))
-        abc (abc/midi-to-abc-string midi clef)]
-    (print "render-note" lifecycle (-> state (:rum/args)))
+        to-abc (fn to-abc [midi] (->> midi
+                                      (filter #(not (nil? %)))
+                                   (map (fn [e]
+                                          (if (vector? e)
+                                            (let [c (count e)]
+                                              (if (= 1 c)
+                                                (abc/midi-to-abc (first c))
+                                                (let [[q a] e]
+                                                  (if (= q a)
+                                                    (abc/midi-to-abc q)
+                                                    (str "[" (to-abc e) "]")))))
+                                            (abc/midi-to-abc e))))
+                                   (apply str)))
+        abc (->> (to-abc midi) (abc/add-clef clef))]
+    (print "render-abc" #_abc lifecycle (-> state (:rum/args)))
     (abc/render-abc abc node)
     state))
 

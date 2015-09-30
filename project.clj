@@ -9,11 +9,13 @@
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [sablono "0.3.4"]
                  [rum "0.3.0"]
+                 [datascript "0.13.1"]
                  [jamesmacaulay/zelkova "0.4.0"]
                  [binaryage/devtools "0.3.0"]]
 
   :plugins [[lein-cljsbuild "1.1.0"]
-            [lein-figwheel "0.4.0"]]
+            [lein-figwheel "0.4.0"]
+            ]
 
   :source-paths ["src"]
 

@@ -28,7 +28,7 @@ body {
 #sidebar {
 }
 
-svg .note + rect {
+.config svg .note + rect {
 	cursor: ns-resize;
 }
 
