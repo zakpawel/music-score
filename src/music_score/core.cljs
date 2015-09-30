@@ -119,24 +119,24 @@
 (defn key-press [model midi]
   (print "key-press handler")
   (condp = (model :stage)
-    :success (start-game model)
-    :mistake (start-game model)
+    :finished (start-game model)
     :guessing
     (let [model' (update-in model [:answer] conj midi)
           answer (model' :answer)
           question (model' :question)]
       (if (= answer question)
-        (assoc-in model' [:stage] :success)
+        (assoc-in model' [:stage] :finished)
         (let [ans-count (count answer)
-              question-so-far (take ans-count (model' :question))]
-          (if (= answer question-so-far)
+              q-count (count question)]
+          (if (< ans-count q-count)
             model'
-            (assoc-in model' [:stage] :mistake))
-          )
+            (assoc-in model' [:stage] :finished))
         )
       )
     )
   )
+)
+
 
 (defn config [model [config-type & args]]
   (let [m (condp = config-type
