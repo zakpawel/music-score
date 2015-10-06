@@ -5,6 +5,7 @@
             [datascript.core :as d]
             [music-score.ui :as ui]
             [music-score.abc :as abc]
+            [music-score.vex :as vex]
             [jamesmacaulay.zelkova.signal :as z])
   (:require-macros [cljs.core.async.macros :as async]))
 
@@ -80,12 +81,15 @@
   :stage [:menu :guessing :success :mistake])
 
 (defonce initial-model
-         {:question []
+         {:question [] #_(->> (range)
+                         (map #(+ 48 %))
+                         (take 54)
+                         (into []))
           :answer   []
           :stage    :guessing
           :dragging false
           :config   {:key   :treble
-                     :range [50 88]}})
+                     :range [53 88]}})
 
 ;; (defonce _input-chan (z/write-port 1))
 ;; (defonce input-signal (z/to-chan (z/write-port 1)))
@@ -222,7 +226,6 @@
           (print "play!!!!")
           (abc/play-abc (abc/midi-to-abc midi)))
         (recur)))))
-
 
 ;; try midi
 (async/go
