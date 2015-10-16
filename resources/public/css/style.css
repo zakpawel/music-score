@@ -10,22 +10,26 @@ body {
 
 #container.dragging {
 	height: 100%;
-	cursor: ns-resize;
+	cursor: ew-resize;
 	position: relative;
 }
 
 #keyboard {
 	position: fixed;
 	bottom: 0;
+	display: none;
 }
 
 #notation-exercise, #notation-answer {
 	height: 250px !important;
-	transform: scale(1.5);
+
 	transform-origin: 0 0;
 }
 
 #sidebar {
+    padding: 10px;
+    box-shadow: 0px 0px 11px gray;
+    background: linear-gradient( 0deg, #9E9E9E -204%, rgba(255, 255, 255, 0.67), #9E9E9E 300%);
 }
 
 .config svg .note + rect {
@@ -36,20 +40,22 @@ body {
 	display: table;
 }
 
-.config .cell {
-	padding: 5px;
-}
-
 .clefs {
 	display: table-cell;
 	vertical-align: top;
+	border-radius: 10px;
+	background-color: dodgerblue;
+	color: white;
+	font-weight: bold;
+	padding: 0 10px;
+	text-align: center;
 	user-select: none;
 	-moz-user-select: none;
 	-webkit-user-select: none;
-
+	cursor: pointer;
 }
 
-.range-config {
+.range-config * {
 	display: table-cell;
 }
 
@@ -65,7 +71,6 @@ body {
 	display: inline-block;
 	position: relative;
 }
-
 
 .key {
 	display: inline-block;
@@ -90,21 +95,20 @@ body {
 	border: 1px solid lightgray;
 }
 
-.selected-clef {
-	font-weight: bold;
-}
-
 .number-field {
+	width: 30px;
+	padding: 0 10px;
 	display: inline-block;
-	padding: 5px 30px;
-	width: 60px;
+	border-radius: 10px;
+	background-color: dodgerblue;
+	color: white;
+	font-weight: bold;
 	text-align: center;
-	border: 1px solid whitesmoke;
 	user-select: none;
 	-moz-user-select: none;
 	-webkit-user-select: none;
 }
 
 .number-field:hover {
-	cursor: ns-resize;
+	cursor: ew-resize;
 }

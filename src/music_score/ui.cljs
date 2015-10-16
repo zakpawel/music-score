@@ -6,14 +6,13 @@
               [rum]
               [jamesmacaulay.zelkova.signal :as z])
     (:require-macros
-      [music-score.utils :refer [debug]]
+      [music-score.utils :as utils :refer [debug]]
       [cljs.core.async.macros :as async]
       [rum :refer [defc defcs]]))
 
 (enable-console-print!)
 
 (defonce drag-channel (z/write-port [:nothing [0 0]]))
-
 
 (def octave-keys
   [:white
@@ -39,28 +38,40 @@
   [(.. e -clientX) (.. e -clientY)])
 
 
-(defn mk-update-state [key]
-  (fn update-state [state [event [x y] mkey]]
-    (let [ret (condp = event
-                :drag-start (if (= key mkey) (do
-                                               #_(print "mousedown received")
-                                               (-> state
-                                                   (assoc :dragging true)
-                                                   (assoc :start-x x)
-                                                   (assoc :start-y y)
-                                                   (assoc :start-value (state :value))))
-                                             state)
-                :mouse-move (if (state :dragging)
-                              (-> state
-                                  (update :value #(- (state :start-value) (Math/floor (* 0.45 (- y (state :start-y)))))))
-                              state)
-                :drag-end (do
-                            #_(print "mouseup received")
-                            (assoc state :dragging false)))]
-      (->> ret
-           (clj->js)
-           #_(.log js/console "update-state" (str event)))
-      ret)))
+(defn vertical-update [{:keys [start-value start-x start-y] :as state} x y]
+  (println "vertical-update still alive")
+  (-> state
+      (update :value #(- start-value (Math/floor (* 0.45 (- y start-y)))))))
+
+(defn horizontal-update [{:keys [start-value start-x start-y] :as state} x y]
+  (println "horizontal-update still alive")
+  (-> state
+      (update :value #(+ start-value (Math/floor (* 0.45 (- x start-x)))))))
+
+(defn mk-update-state
+  ([key]
+    (mk-update-state key horizontal-update))
+  ([key update-fn]
+    (fn update-state [state [event [x y] mkey]]
+      (let [ret (condp = event
+                  :drag-start (if (= key mkey) (do
+                                                 #_(print "mousedown received")
+                                                 (-> state
+                                                     (assoc :dragging true)
+                                                     (assoc :start-x x)
+                                                     (assoc :start-y y)
+                                                     (assoc :start-value (state :value))))
+                                               state)
+                  :mouse-move (if (state :dragging)
+                                (update-fn state x y)
+                                state)
+                  :drag-end (do
+                              #_(print "mouseup received")
+                              (assoc state :dragging false)))]
+        (->> ret
+             (clj->js)
+             #_(.log js/console "update-state" (str event)))
+        ret))))
 
 (defn foldp [f init ch]
   (let [out (async/chan)]
@@ -75,11 +86,13 @@
 (defcs number-field <
        {:did-mount
         (fn [state]
-          (let [args (-> state (:rum/args) (first))
-                value (:value args)
-                key (:key args)
-                on-drag-change (:on-drag-change args)
-                on-value-change (:on-value-change args)
+          (println "number-field did-mount")
+          (let [{:keys [value
+                        key
+                        on-drag-change
+                        on-value-change
+                        min
+                        max]} (-> state (:rum/args) (first))
                 initial-state {:dragging false :value value}
                 out-ch (foldp (mk-update-state key) initial-state (z/to-chan drag-channel))]
             (async/go-loop [old-state initial-state]
@@ -88,7 +101,9 @@
                                  new-value (:value new-state)
                                  old-drag (:dragging old-state)
                                  new-drag (:dragging new-state)]
-                             (when (not= old-value new-value)
+                             (when (and (not= old-value new-value)
+                                        (or (nil? min) (> new-value min))
+                                        (or (nil? max) (< new-value max)))
                                (on-value-change new-value))
                              (when (not= old-drag new-drag)
                                (on-drag-change new-drag))
@@ -102,7 +117,9 @@
   {:on-mouse-down (fn [e]
                     (print "mousedown" value)
                     (async/put! drag-channel [:drag-start (get-evt-coord e) key]) nil)}
-  (abc/midi-to-abc value)])
+  (->> value
+       (vex/midi-to-my-note)
+       ((fn [{:keys [pitch acc octave]}] (str (name pitch) (if acc (name acc) "") octave))))])
 
 (defn render-key [n oct-num type channel]
   (let [value (+ (+ n 12) (* oct-num 12))]
@@ -162,12 +179,15 @@
   (render-notes [[low-note nil] [high-note nil]] clef "config" 300))
 
 (defn render-range-config [low-note high-note clef channel]
-  [:div.range-config.cell
-   (number-field {:value low-note :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])
+  [:div.range-config
+   (number-field {:min 20 :max 108
+                  :value low-note
+                  :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])
                   :key :low
                   :on-value-change #(async/put! channel [:config :range 0 %])
                   :on-drag-change #(async/put! channel [:dragging %])})
-   (number-field {:value high-note
+   (number-field {:min 20 :max 108
+                  :value high-note
                   :key :high
                   :on-blur #(async/put! channel [:config :range 1 (parse-pitch %)])
                   :on-value-change #(async/put! channel [:config :range 1 %])
@@ -178,13 +198,16 @@
 
 (defn render-configuration [model channel]
   (let [clef (get-in model [:config :key])
-        switch {true "selected-clef" false ""}
+        switch (fn [clef]
+                 (condp = clef
+                   :treble :bass
+                   :bass :treble
+                   ))
         low-note (-> model (get-in [:config :range 0]))
         high-note (-> model (get-in [:config :range 1]))]
         [:div.config
          [:div.clefs.cell
-          [:div {:class (switch (= :bass clef))   :on-click #(async/put! channel [:config :key :bass])} "K:bass"]
-          [:div {:class (switch (= :treble clef)) :on-click #(async/put! channel [:config :key :treble])} "K:treble"]]
+          {:on-click #(async/put! channel [:config :key (switch clef)])} (name clef)]
           (render-range-config low-note high-note clef channel)]
     ))
 
@@ -279,6 +302,7 @@
          state)}
   [midi clef id width]
   [:div {:id id}])
+
 
 (rum/defc root-component
   [state input-signal]

@@ -10,8 +10,10 @@
                  [sablono "0.3.4"]
                  [rum "0.3.0"]
                  [datascript "0.13.1"]
+                 [cljsjs/d3 "3.5.5-0"]
                  [jamesmacaulay/zelkova "0.4.0"]
-                 [binaryage/devtools "0.3.0"]]
+                 [binaryage/devtools "0.3.0"]
+                 #_[figwheel-sidecar "0.4.0"]]
 
   :plugins [[lein-cljsbuild "1.1.0"]
             [lein-figwheel "0.4.0"]
