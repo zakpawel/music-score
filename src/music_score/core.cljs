@@ -110,7 +110,7 @@
                [?c :config/range ?r]
                [?c :config/notes-count ?n]] db)
         x (println "start-game" game-id clef min max n)
-        
+
         new-exercise (mk-exercise min max clef n)
 
         new-db (d/db-with db [new-exercise
@@ -121,9 +121,6 @@
                                :game/mouse-dragging false}])]
     new-db)
   )
-
-;; new id (negative)
-
 
 (defn key-press [db midi]
   (print "key-press handler" midi)
