@@ -24,7 +24,7 @@
    :config/notes-count    {}
    :game/config           {:db/valueType :db.type/ref :db/cardinality :db.cardinality/one}
    :game/stage            {}
-   :game/current-exercise {}
+   :game/current-exercise {:db/valueType :db.type/ref :db/cardinality :db.cardinality/one}
    :game/exercises        {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
    :exercise/from         {}
    :exercise/to           {}
@@ -102,7 +102,6 @@
 
 (defn start-game [db]
   (let [
-        ;; query config data
         [game-id clef [min max] n]
         (d/q '[:find [?g ?clef ?r ?n]
                :where
@@ -111,30 +110,23 @@
                [?c :config/range ?r]
                [?c :config/notes-count ?n]] db)
         x (println "start-game" game-id clef min max n)
-
-        ;; generate new exercise
+        
         new-exercise (mk-exercise min max clef n)
 
-        ;; insert new exercise
-        report (d/with db [{:db/id game-id
-                            :game/exercises [new-exercise]
-                            :game/stage :guessing
-                            :game/mouse-dragging false}])
-
-        ;; extract :db/id of exercise
-        new-exercise-id
-        (-> report
-             (:tempids)
-             (get (:db/id new-exercise)))
-
-        ;; make new exercise the current exercise
-        new-db (d/db-with (:db-after report) [{:db/id game-id
-                                               :game/current-exercise new-exercise-id}])]
+        new-db (d/db-with db [new-exercise
+                              {:db/id game-id
+                               :game/exercises [new-exercise]
+                               :game/current-exercise (:db/id new-exercise)
+                               :game/stage :guessing
+                               :game/mouse-dragging false}])]
     new-db)
   )
 
+;; new id (negative)
+
+
 (defn key-press [db midi]
- (print "key-press handler" midi)
+  (print "key-press handler" midi)
 
   (let [[game-id stage ex-id]
         (d/q '[:find [?game ?s ?e]
