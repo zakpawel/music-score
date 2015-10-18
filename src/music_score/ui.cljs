@@ -211,41 +211,11 @@
           (render-range-config low-note high-note clef channel)]
     ))
 
-(defn check-correctness [question answer]
-  (->> (map (fn [q a]
-              (if (= q a)
-                "correct"
-                "error")) question answer)
-       (into [])))
-
-(defn query-dom-notes [node]
-  (let [dom-notes (. node (getElementsByClassName "note"))]
-    dom-notes))
-
-(defn apply-classes! [classes dom-notes]
-  (doseq [[clazz note] (map vector classes dom-notes)]
-    (let [cls (. note (getAttribute "class"))]
-      (. note (setAttribute "class" (str cls " " clazz)))
-      )
-    )
-  )
-
 (defc render-exercise <
   rum/static
-      {:did-update
-       (fn [state]
-         (print "render-exercise did-update")
-         (let [[question answer] (-> state (:rum/args))]
-           (->> (query-dom-notes (. js/document (getElementById "exercise")))
-                (apply-classes! (check-correctness question answer))))
-         state)}
-  [question answer clef]
-      (let [merged (->> (map vector question (concat answer (repeat nil))) (into []))]
-        (print "render-exercise render" merged question)
-        [:div
-         (render-notes merged clef "exercise")
-         #_(render-notes answer clef "answer")]))
-
+  [guesses clef]
+      [:div
+       (render-notes guesses clef "exercise")])
 
 (defn printr [e]
   (print e)
@@ -309,6 +279,7 @@
     (let [clef (get-in state [:config :key])
           question (state :question)
           answer (state :answer)
+          guesses (state :guesses)
           dragging (state :dragging)
           cls (if dragging
                 "dragging" "")]
@@ -319,6 +290,6 @@
              :on-mouse-leave #(do (print "onmouseleave") (async/put! drag-channel [:drag-end (get-evt-coord %)]) nil)}
        [:div {:id "sidebar"}
         (render-configuration state input-signal)]
-       (render-exercise question answer clef)
+       (render-exercise guesses clef)
        (render-keyboard state input-signal)
        [:div#vex]]))

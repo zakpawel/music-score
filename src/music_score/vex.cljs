@@ -65,12 +65,12 @@
     note))
 
 
-(defn to-stave-notes [merged clef]
-  (print merged)
-  (let [notes (map (fn [m]
-                   (print "xxx map" m)
-                   (let [[q a] m
-                         [[k1 acc1] [k2 acc2]] (map (comp my-note-to-str midi-to-my-note) m)
+(defn to-stave-notes [guesses clef]
+  (print guesses)
+  (let [notes (map (fn [guess]
+                   (print "xxx map" guess)
+                   (let [[q a] guess
+                         [[k1 acc1] [k2 acc2]] (map (comp my-note-to-str midi-to-my-note) guess)
                          cls (condp = a
                                    q [0 "green" [k1] [acc1]]
                                    nil [0 "" [k1] [acc1]]
@@ -78,7 +78,7 @@
                                      [0 "red" [k2 k1] [acc2 acc1]]
                                      [1 "red" [k1 k2] [acc1 acc2]])
                                    )]
-                     cls)) merged)]
+                     cls)) guesses)]
     (print notes)
     (->> notes
          (map #(stave-note % "q" clef))
