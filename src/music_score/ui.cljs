@@ -189,7 +189,7 @@
    (number-field {:min 20 :max 108
                   :value high-note
                   :key :high
-                  :on-blur #(async/put! channel [:config :range 1 (parse-pitch %)])
+                  :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])
                   :on-value-change #(async/put! channel [:config :range 1 %])
                   :on-drag-change #(async/put! channel [:dragging %])})
 

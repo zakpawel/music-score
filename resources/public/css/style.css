@@ -17,7 +17,6 @@ body {
 #keyboard {
 	position: fixed;
 	bottom: 0;
-	display: none;
 }
 
 #notation-exercise, #notation-answer {
