@@ -3,6 +3,7 @@
               [clojure.data :as data]
               [music-score.abc :as abc]
               [music-score.vex :as vex]
+              [music-score.d3playground :as d3]
               [rum]
               [jamesmacaulay.zelkova.signal :as z])
     (:require-macros
@@ -158,6 +159,7 @@
 (defc render-range-notes <
       {:did-update
        (fn [state]
+         (println "render-range-notes did-udpate")
          (let [node (->> state
                          (:rum/react-component)
                          (.getDOMNode))
@@ -274,22 +276,28 @@
   [:div {:id id}])
 
 
-(rum/defc root-component
+(rum/defc root-component <
+          {:did-update
+           (fn [state]
+             (println "root-component did-update")
+             state)}
   [state input-signal]
-    (let [clef (get-in state [:config :key])
-          question (state :question)
-          answer (state :answer)
-          guesses (state :guesses)
-          dragging (state :dragging)
-          cls (if dragging
-                "dragging" "")]
-      [:div {:id             "container"
-             :class          cls
-             :on-mouse-move  #(do (async/put! drag-channel [:mouse-move (get-evt-coord %)]) nil)
-             :on-mouse-up    #(do (print "onmouseup") (async/put! drag-channel [:drag-end (get-evt-coord %)]) nil)
-             :on-mouse-leave #(do (print "onmouseleave") (async/put! drag-channel [:drag-end (get-evt-coord %)]) nil)}
-       [:div {:id "sidebar"}
-        (render-configuration state input-signal)]
-       (render-exercise guesses clef)
-       (render-keyboard state input-signal)
-       [:div#vex]]))
+  (let [clef (get-in state [:config :key])
+        question (state :question)
+        answer (state :answer)
+        guesses (state :guesses)
+        dragging (state :dragging)
+        cls (if dragging
+              "dragging" "")]
+    (println "render root-component")
+    [:div {:id             "container"
+           :class          cls
+           :on-mouse-move  #(do (async/put! drag-channel [:mouse-move (get-evt-coord %)]) nil)
+           :on-mouse-up    #(do (print "onmouseup") (async/put! drag-channel [:drag-end (get-evt-coord %)]) nil)
+           :on-mouse-leave #(do (print "onmouseleave") (async/put! drag-channel [:drag-end (get-evt-coord %)]) nil)}
+     [:div {:id "sidebar"}
+      (render-configuration state input-signal)]
+     (render-exercise guesses clef)
+     (d3/render-keyboard input-signal)
+     #_(render-keyboard state input-signal)
+     [:div#vex]]))

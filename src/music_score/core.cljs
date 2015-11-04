@@ -8,11 +8,14 @@
             [music-score.ui :as ui]
             [music-score.abc :as abc]
             [music-score.vex :as vex]
-            #_[music-score.d3-playground :as d3]
+            [devtools.core :as devtools]
+            [music-score.d3playground :as d3]
             [jamesmacaulay.zelkova.signal :as z])
   (:require-macros [cljs.core.async.macros :as async]))
 
 (enable-console-print!)
+
+(devtools/install!)
 
 (println "Edits to this text should show up in your developer console.")
 
@@ -71,26 +74,26 @@
                             (into []))}))
 
 
-(def conn (let [conn (d/create-conn schema)
+(defonce conn (let [conn (d/create-conn schema)
                 game {:db/id         (mk-id)
                       :game/stage    :guessing
                       :game/config   {:db/id        (mk-id)
                                       :config/clef  :treble
                                       :config/range [50 70]
-                                      :config/notes-count 5}}
+                                      :config/notes-count 12}}
                 new-db (d/db-with @conn [game])]
             (reset! conn new-db)
             (println "init config" new-db)
 
             ;; testing
-            #_(let [result (d/q '[:find (count ?g1)
+            #_(let [result (d/q '[:find ?q1 (count ?q1)
                                 :in $
                                 :where
                                 [?e :exercise/guesses ?g1]
-                                [?e :exercise/guesses ?g2]
+                                #_[?e :exercise/guesses ?g2]
                                 [?g1 :guess/question ?q1]
                                 #_[?g2 :guess/question ?q2]
-                                [?g2 :guess/answer ?a]
+                                #_[?g1 :guess/answer ?a]
                                 #_[(get-else $ ?g :guess/answer nil) ?a]
                                 ] @conn)]
               (->> result (pprint/pprint)))
@@ -98,7 +101,7 @@
             ))
 
 
-(defonce input-signal (z/write-port [:key-press 70]))
+(defonce input-signal (z/write-port nil #_[:key-press 70]))
 
 (defn start-game [db]
   (let [
@@ -109,7 +112,7 @@
                [?c :config/clef ?clef]
                [?c :config/range ?r]
                [?c :config/notes-count ?n]] db)
-        x (println "start-game" game-id clef min max n)
+        x (js/console.log "start-game" game-id clef min max n)
 
         new-exercise (mk-exercise min max clef n)
 
@@ -123,6 +126,7 @@
   )
 
 (defn key-press [db midi]
+
   (print "key-press handler" midi)
 
   (let [[game-id stage ex-id]
@@ -135,12 +139,18 @@
     (condp = stage
       :finished (start-game db)
       :guessing
-      (let [guess-id (d/q '[:find ?g .
+      (let [guesses (d/q '[:find ?g
                             :in $ ?ex
                             :where
                             [?ex :exercise/guesses ?g]
                             [(get-else $ ?g :guess/answer nil) ?a]
                             [(nil? ?a)]] db ex-id)
+
+            guess-id (->> guesses
+                          (sort-by first)
+                          (ffirst))
+
+            x (println "key-press guess-id" guesses guess-id)
 
             new-db (-> db
                 (d/db-with
@@ -164,6 +174,28 @@
                    [?g2 :guess/answer ?a]] new-db game-id)
             ]
         (print "key-press handler" qn an)
+
+        (let [mapper (fn [q a] (if (= q a) 1 0))
+              result (d/q '[:find ?q1 (count ?g1) (sum ?a2)
+                            :in $ ?mapper
+                            :where
+                            [?e :exercise/guesses ?g1]
+                            #_[?e :exercise/guesses ?g2]
+                            [?g1 :guess/question ?q1]
+                            #_[?g2 :guess/question ?q2]
+                            #_[?g1 :guess/answer ?a]
+                            [(get-else $ ?g1 :guess/answer nil) ?a]
+                            [(not= nil ?a)]
+                            [(?mapper ?q1 ?a) ?a2]
+                            ] new-db mapper)
+              m (->> result
+                     (map (fn [[note count correct]]
+                                {:count count
+                                 :note note
+                                 :correct correct}))
+                     (clj->js))]
+          (d3/draw-chart! m)
+          (->> result (pprint/pprint)))
 
         (if (= qn an)
           (d/db-with new-db [[:db/add game-id :game/stage :finished]])
@@ -203,7 +235,6 @@
 
 
 (defn update-db [[event-type & args] db]
-  (println "update-db" event-type args)
   (let [new-db (condp = event-type
                     :start-game (start-game db)
                     :key-press  (key-press db (first args))
@@ -211,11 +242,15 @@
                     :dragging   (handle-drag db (first args))
                     db
                     )]
+    (println "update-db" event-type args #_new-db)
     new-db))
 
 ;; here foldp
 (defonce state-signal
          (z/foldp update-db (start-game @conn) input-signal))
+
+(async/go
+  (>! input-signal [:nothing]))
 
 (defn convert-cfg [cfg]
   {:key   (:config/clef cfg)
@@ -232,7 +267,8 @@
                       [?e :exercise/guesses ?g]
                       [?g :guess/question ?q]
                       [(get-else $ ?g :guess/answer nil) ?a]] db)
-        gs (map butlast result)
+        gs (->> result
+                (sort-by last))
         [dragging config] (d/q '[:find [?d (pull ?c [*])]
                                  :where
                                  [?g :game/mouse-dragging ?d]
@@ -264,8 +300,7 @@
    channel))
 
 
-(defn ^:export main []
-  (println "main called")
+(defonce midi-playback-loop
   (let [ch (z/to-chan input-signal)]
     (async/go-loop
       []
@@ -297,4 +332,3 @@
                  (js/console.log type pitch)
                  (async/put! input-signal [:key-press pitch]))))))))
 
-(main)

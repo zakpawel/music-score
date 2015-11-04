@@ -28,7 +28,7 @@
   ;; range is <21 108>
   ;;           C0 C8
   (when midi
-    (print "midi-to-my-note" midi)
+    #_(print "midi-to-my-note" midi)
     (let [midi-norm (- midi 12)
           octave-n (-> midi-norm (/ 12) (int))
           num (-> midi
@@ -40,7 +40,7 @@
   )
 
 (defn my-note-to-str [my-note]
-  (print "my-note-to-str" my-note)
+  #_(print "my-note-to-str" my-note)
   (when my-note
     (let [{:keys [pitch acc octave]} my-note
           my-name (fnil name "")]
@@ -53,7 +53,7 @@
                                        :keys     (clj->js keys)
                                        :duration duration})]
     (do
-      (print "stave-note" note)
+      #_(print "stave-note" note)
       #_(doseq [[idx k] (map-indexed vector keys)]
         (.setKeyStyle note idx #js {:fillStyle cls}))
       ;; for the moment we assume we will always receive at least two notes (q,a)
@@ -66,9 +66,9 @@
 
 
 (defn to-stave-notes [guesses clef]
-  (print guesses)
+  #_(print guesses)
   (let [notes (map (fn [guess]
-                   (print "xxx map" guess)
+                   #_(print "xxx map" guess)
                    (let [[q a] guess
                          [[k1 acc1] [k2 acc2]] (map (comp my-note-to-str midi-to-my-note) guess)
                          cls (condp = a
@@ -79,7 +79,7 @@
                                      [1 "red" [k1 k2] [acc1 acc2]])
                                    )]
                      cls)) guesses)]
-    (print notes)
+    #_(print notes)
     (->> notes
          (map #(stave-note % "q" clef))
          (into [])
@@ -127,7 +127,7 @@
 ;.setStave(stave)
 ;.setJustification(Vex.Flow.TextNote.Justification.LEFT);
 (defn to-text-notes [midi-pairs stave]
-  (print "to-text-note" (count midi-pairs))
+  #_(print "to-text-note" (count midi-pairs))
   (->> midi-pairs
        (map (fn [p]
               (let [midi-to-text-note (fn [[q a]]
