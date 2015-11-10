@@ -72,8 +72,6 @@ body {
 }
 
 .key {
-	display: inline-block;
-	vertical-align: top;
 	box-sizing: border-box;
 	user-select: none;
 	-moz-user-select: none;
@@ -81,17 +79,24 @@ body {
 }
 
 .key.black {
-	background-color: black;
 	width: 10px;
 	height: 75px;
-	position: absolute;
+	fill: black;
 }
 
 .key.white {
-	background-color: white;
 	width: 20px;
 	height: 120px;
-	border: 1px solid lightgray;
+	fill: white;
+}
+
+.key.white.mask, .key.black.mask {
+	fill: #718996;
+	opacity: 0.4;
+}
+
+.key.white.mask.off, .key.black.mask.off {
+	opacity: 0;
 }
 
 .number-field {

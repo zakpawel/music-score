@@ -4,6 +4,8 @@
               [music-score.abc :as abc]
               [music-score.vex :as vex]
               [music-score.d3playground :as d3]
+              [music-score.keyboard :as keyboard]
+              [music-score.start-app :as start]
               [rum]
               [jamesmacaulay.zelkova.signal :as z])
     (:require-macros
@@ -13,23 +15,7 @@
 
 (enable-console-print!)
 
-(defonce drag-channel (z/write-port [:nothing [0 0]]))
-
-(def octave-keys
-  [:white
-    :black
-   :white
-    :black
-   :white
-   :white
-    :black
-   :white
-    :black
-   :white
-    :black
-   :white])
-
-#_(debug (+ 2 2))
+(defonce drag-channel (z/write-port [::nothing [0 0]]))
 
 (extend-type js/HTMLCollection
   ISeqable
@@ -131,16 +117,6 @@
          	   :style {:left (str (* n 12) "px")}
          	   :on-click #(async/put! channel [:key-press value])}])))
 
-(defn render-octave [channel oct-num]
-  (as-> octave-keys _
-    (map-indexed (fn [n k]
-                  (render-key n oct-num k channel)) _)
-    [:div {:className "octave"} _]))
-
-
-(defc render-keyboard [data channel]
-	[:div {:id "keyboard"}
-		(map #(render-octave channel %) (range 1 8))])
 
 (defn parse-pitch [evt]
   (let [x (as-> (.. evt -target -value) _
@@ -184,16 +160,16 @@
   [:div.range-config
    (number-field {:min 20 :max 108
                   :value low-note
-                  :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])
+                  :on-blur #(async/put! channel [:core.action/config :range 0 (parse-pitch %)])
                   :key :low
-                  :on-value-change #(async/put! channel [:config :range 0 %])
-                  :on-drag-change #(async/put! channel [:dragging %])})
+                  :on-value-change #(async/put! channel [:core.action/config :range 0 %])
+                  :on-drag-change #(async/put! channel [:core.action/dragging %])})
    (number-field {:min 20 :max 108
                   :value high-note
                   :key :high
-                  :on-blur #(async/put! channel [:config :range 0 (parse-pitch %)])
-                  :on-value-change #(async/put! channel [:config :range 1 %])
-                  :on-drag-change #(async/put! channel [:dragging %])})
+                  :on-blur #(async/put! channel [:core.action/config :range 1 (parse-pitch %)])
+                  :on-value-change #(async/put! channel [:core.action/config :range 1 %])
+                  :on-drag-change #(async/put! channel [:core.action/dragging %])})
 
    #_(render-range-notes low-note high-note clef)]
   )
@@ -209,7 +185,7 @@
         high-note (-> model (get-in [:config :range 1]))]
         [:div.config
          [:div.clefs.cell
-          {:on-click #(async/put! channel [:config :key (switch clef)])} (name clef)]
+          {:on-click #(async/put! channel [:core.action/config :key (switch clef)])} (name clef)]
           (render-range-config low-note high-note clef channel)]
     ))
 
@@ -281,12 +257,14 @@
            (fn [state]
              (println "root-component did-update")
              state)}
-  [state input-signal]
+  [input-signal state]
   (let [clef (get-in state [:config :key])
         question (state :question)
         answer (state :answer)
         guesses (state :guesses)
         dragging (state :dragging)
+        keyboard (state :keyboard)
+        config (state :config)
         cls (if dragging
               "dragging" "")]
     (println "render root-component")
@@ -298,6 +276,9 @@
      [:div {:id "sidebar"}
       (render-configuration state input-signal)]
      (render-exercise guesses clef)
-     (d3/render-keyboard input-signal)
+     (keyboard/render-keyboard (start/proxy #(start/make-action :core.action/keyboard %) input-signal)
+                               #_(start/map-signal #(start/make-action :core.action/keyboard %) input-signal)
+                               keyboard
+                               config)
      #_(render-keyboard state input-signal)
      [:div#vex]]))

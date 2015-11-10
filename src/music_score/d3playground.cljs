@@ -17,35 +17,7 @@
 
 (println "Edits to this text should show up in your developer console.")
 
-(declare draw-keyboard!)
 
-(defn render-keyboard-hook [state]
-  (let [channel (->> state
-                     (:rum/args)
-                     (first))]
-    (as-> state x
-          (:rum/react-component x)
-          (.getDOMNode x)
-          (debug x)
-          (.-firstChild x)
-          (debug x)
-          (draw-keyboard! x channel)))
-  state)
-
-(defc render-keyboard <
-      {:did-mount
-       (fn [state]
-         (println "render-keyboard did-mount")
-         (render-keyboard-hook state))
-       :did-update
-       (fn [state]
-         (println "render-keyboard did-update")
-         (render-keyboard-hook state))}
-      [data]
-      (do
-        (println "render-keyboard render")
-        [:div#keybd
-         [:svg {:width 1400 :height 400}]]))
 
 
 
@@ -114,87 +86,6 @@
         (.attr "x" (fn [d i] (* i 20)))
         (.attr "fill" "dodgerblue"))))
 
-
-(defn div-with-rem
-  ([n d]
-   (div-with-rem n d 12))
-  ([n d padding]
-   (as-> n n
-         (- n padding)
-         (vector (Math/floor (/ n d)) (rem n d)))))
-
-(defn white-count [n]
-  (let [m {0  [0 :white]
-           1  [1 :black]
-           2  [1 :white]
-           3  [2 :black]
-           4  [2 :white]
-           5  [3 :white]
-           6  [4 :black]
-           7  [4 :white]
-           8  [5 :black]
-           9  [5 :white]
-           10 [6 :black]
-           11 [6 :white]}
-        [o n] (div-with-rem n 12)
-        [n color] (m n)]
-    (vector (+ (* o 7) n) color))
-  )
-
-(defn key-offset [p key-width]
-  (let [[wc color] (white-count p)
-        padding (if (= color :black) (- 0 (/ 20 4)) 0)
-        offset (+ (* wc key-width) padding)]
-    [offset color]))
-
-(defonce draw-keyboard!
-   (let [start 21
-         width 20
-         [start-offset _] (key-offset start width)
-         domain (range start 109)
-         data2 (as-> domain d
-                     (map (fn [p]
-                            (let [[offset color] (key-offset p 20)
-                                  offset (- offset start-offset)]
-                              #js {:pitch p :offset offset :color color})) d))]
-     (fn [node channel]
-       #_(println "draw-keyboard!")
-       (let [svg (-> js/d3
-                     (.select node))
-             {:keys [black white]} (group-by #(.-color %) data2)]
-         (-> svg
-             (.selectAll "rect")
-             (.data (clj->js white) (fn [d] (.-pitch d)))
-             (.enter)
-             (.append "rect")
-             (.attr "class" "white")
-             (.attr "x" (fn [d i] (.-offset d)))
-             (.attr "rx" 4)
-             (.attr "ry" 4)
-             (.attr "stroke" "black")
-             (.on "click" (fn [a]
-                            (async/put! channel [:key-press (.-pitch a)])))
-             (.attr "fill" "white")
-             (.attr "width" 20)
-             (.attr "height" 100))
-
-         (-> svg
-             (.selectAll "rect")
-             (.data (clj->js black) (fn [d] (.-pitch d)))
-             (.enter)
-             (.append "rect")
-             (.attr "class" "black")
-             (.attr "x" (fn [d i] (.-offset d)))
-             (.attr "rx" 1)
-             (.attr "ry" 1)
-             (.attr "stroke" "black")
-             (.on "click" (fn [a]
-                            (async/put! channel [:key-press (.-pitch a)])))
-             (.attr "fill" "black")
-             (.attr "width" 10)
-             (.attr "height" 60))
-         )
-       )))
 
 (defonce draw-chart!
          (let [svg (atom nil)]
