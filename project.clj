@@ -8,7 +8,7 @@
                  [org.clojure/clojurescript "1.7.145"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [sablono "0.3.4"]
-                 [rum "0.3.0"]
+                 [rum "0.5.0"]
                  [datascript "0.13.1"]
                  [cljsjs/d3 "3.5.5-0"]
                  [jamesmacaulay/zelkova "0.4.0"]

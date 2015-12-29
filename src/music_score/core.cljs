@@ -11,15 +11,17 @@
             [music-score.start-app :as app]
             [devtools.core :as devtools]
             [music-score.d3playground :as d3]
-            [jamesmacaulay.zelkova.signal :as z])
-  (:require-macros [cljs.core.async.macros :as async]))
+            [jamesmacaulay.zelkova.signal :as z]
+            [jamesmacaulay.zelkova.keyboard :as zk])
+  (:require-macros [cljs.core.async.macros :as async]
+                   [music-score.utils :refer [print println]]))
 
-(enable-console-print!)
+(def debug 0)
+#_(enable-console-print!)
 
-(devtools/install!)
+#_(devtools/install!)
 
-(println "Edits to this text should show up in your developer console.")
-
+#_(println "Edits to this text should show up in your developer console.")
 
 (def schema
   {:game/mouse-dragging   {}
@@ -77,12 +79,12 @@
 
 
 (defonce conn (let [conn (d/create-conn schema)
-                    game {:db/id       (mk-id)
-                          :game/stage  :guessing
-                          :game/config {:db/id              (mk-id)
-                                        :config/clef        :treble
-                                        :config/range       [50 70]
-                                        :config/notes-count 12}
+                    game {:db/id         (mk-id)
+                          :game/stage    :guessing
+                          :game/config   {:db/id              (mk-id)
+                                          :config/clef        :treble
+                                          :config/range       [50 70]
+                                          :config/notes-count 12}
                           :game/keyboard keyboard/initial-model}
                     new-db (d/db-with @conn [game])]
                 (reset! conn new-db)
@@ -138,7 +140,9 @@
                [?e :exercise/guesses ?g]] db)]
 
     (condp = stage
-      :finished (start-game db)
+      :finished
+      (start-game db)
+
       :guessing
       (let [guesses (d/q '[:find ?g
                            :in $ ?ex
@@ -176,36 +180,13 @@
             ]
         (print "key-press handler" qn an)
 
-        (let [mapper (fn [q a] (if (= q a) 1 0))
-              result (d/q '[:find ?q1 (count ?g1) (sum ?a2)
-                            :in $ ?mapper
-                            :where
-                            [?e :exercise/guesses ?g1]
-                            #_[?e :exercise/guesses ?g2]
-                            [?g1 :guess/question ?q1]
-                            #_[?g2 :guess/question ?q2]
-                            #_[?g1 :guess/answer ?a]
-                            [(get-else $ ?g1 :guess/answer nil) ?a]
-                            [(not= nil ?a)]
-                            [(?mapper ?q1 ?a) ?a2]
-                            ] new-db mapper)
-              m (->> result
-                     (map (fn [[note count correct]]
-                            {:count   count
-                             :note    note
-                             :correct correct}))
-                     (clj->js))]
-          (d3/draw-chart! m)
-          (->> result (pprint/pprint)))
-
         (if (= qn an)
           (d/db-with new-db [[:db/add game-id :game/stage :finished]])
           new-db))
-
+        db
       )
     )
   )
-
 
 (defn config [db [config-type & args]]
   (let [[config-id crange]
@@ -213,9 +194,6 @@
                :where
                [?g :game/config ?c]
                [?c :config/range ?r]] db)
-
-        x (print "config" config-id crange)
-
         new-db
         (condp = config-type
           :key
@@ -235,32 +213,66 @@
     (d/db-with db [[:db/add game-id :game/mouse-dragging dragging?]])))
 
 (defn update-config [db [event-type selection]]
-  (println "dupa")
-  (let [sorted (sort selection)
-        low (first sorted)
-        high (last sorted)]
-    (-> db
-        (config [:range 0 low])
-        (config [:range 1 high]))))
+  (let [stage
+        (d/q '[:find ?s .
+               :where [?g :game/stage ?s]] db)]
+    (if (= :configuring stage)
+      (let [sorted (sort selection)
+            low (first sorted)
+            high (last sorted)]
+        (-> db
+            (config [:range 0 low])
+            (config [:range 1 high])))
+      db)))
 
 (defn update-keyboard-model [db action]
-  #_(println "update-keyboard-model" action)
-  db
-  (let [[game-id keyboard-model] (d/q '[:find [?g ?k]
-                                        :where
-                              [?g :game/keyboard ?k]] db)
-        new-db (d/db-with db [{} [:db/add game-id :game/keyboard (keyboard/update-model action keyboard-model)]])]
+  (let [[game-id keyboard-model]
+        (d/q '[:find [?g ?k]
+               :where
+               [?g :game/keyboard ?k]] db)
+
+        new-db
+        (d/db-with db
+                   [[:db/add game-id
+                     :game/keyboard
+                     (keyboard/update-model action keyboard-model)]])]
     new-db)
   )
 
+(declare input-signal)
+
 (defn keyboard-event [db [[event-type arg :as action]]]
-  (println "keyboard-event" action)
   (let [action-type (namespace event-type)]
     (if (= action-type "keyboard.action")
       (condp = event-type
-        :keyboard.action/selection (update-config db action)
+        :keyboard.action/selection
+        (update-config db action)
+
+        :keyboard.action/key-down
+        (do
+          (async/put! input-signal (app/make-action :core.action/key-press arg))
+          (update-keyboard-model db action))
+
+        ;; else
         (update-keyboard-model db action))
       db)))
+
+(defn pc-key [db [key-map]]
+  (if (->> (key-map :key-codes)
+           (empty?)
+           (not))
+    (let [[game-id stage]
+          (d/q '[:find [?g ?s]
+                 :where [?g :game/stage ?s]] db)
+          next-stage (if (= stage :guessing)
+                       :configuring
+                       :guessing)
+          new-db
+          (d/db-with db [[:db/add
+                          game-id
+                          :game/stage next-stage]])]
+      new-db)
+    db))
 
 (defn update-db [[event-type & args] db]
   (let [new-db (condp = event-type
@@ -269,10 +281,35 @@
                  :core.action/config (config db args)
                  :core.action/dragging (handle-drag db (first args))
                  :core.action/keyboard (keyboard-event db args)
-                 db
-                 )]
-    (println "update-db" event-type args #_new-db)
+                 :core.action/pc-key (pc-key db args)
+                 db)]
     new-db))
+
+
+(defn max-count [db]
+  (let [mapper (fn [q a] (if (= q a) 1 0))]
+    (d/q '[:find ?q1 (count ?g1) (sum ?a2)
+           :in $ ?mapper
+           :where
+           [?e :exercise/guesses ?g1]
+           #_[?e :exercise/guesses ?g2]
+           [?g1 :guess/question ?q1]
+           #_[?g2 :guess/question ?q2]
+           #_[?g1 :guess/answer ?a]
+           [(get-else $ ?g1 :guess/answer nil) ?a]
+           [(not= nil ?a)]
+           [(?mapper ?q1 ?a) ?a2]
+           ] db mapper)))
+
+(defn chart-query [db]
+  (let [result (max-count db)
+        mcount (d/q '[:find (max ?c) .
+                      :in [[?q ?c ?s]]] result)
+        result2 (d/q '[:find ?q ?c ?s ?m
+                       :in ?m [[?q ?c ?s]]] mcount result)
+        ]
+    result2))
+
 
 (defn convert-cfg [cfg]
   {:key   (:config/clef cfg)
@@ -291,15 +328,22 @@
                       [(get-else $ ?g :guess/answer nil) ?a]] db)
         gs (->> result
                 (sort-by last))
-        [dragging config keyboard] (d/q '[:find [?d (pull ?c [*]) ?k]
-                                          :where
-                                          [?g :game/mouse-dragging ?d]
-                                          [?g :game/keyboard ?k]
-                                          [?g :game/config ?c]] db)
-        state {:guesses  gs
-               :dragging dragging
-               :config   (convert-cfg config)
-               :keyboard keyboard}]
+        [dragging? stage config keyboard]
+        (d/q '[:find [?d ?s (pull ?cfg [*]) ?k]
+               :where
+               [?g :game/mouse-dragging ?d]
+               [?g :game/stage ?s]
+               [?g :game/keyboard ?k]
+               [?g :game/config ?cfg]] db)
+        state {:guesses      gs
+               :dragging?    dragging?
+               :config       (convert-cfg config)
+               :keyboard     keyboard
+               :configuring? (= stage :configuring)
+               :chart-data (chart-query db)}
+        state (if (= stage :confguring)
+                (assoc stage :chart-data (chart-query db))
+                state)]
     (ui/root-component input-signal state)))
 
 
@@ -315,6 +359,9 @@
                                       :update update-db
                                       :view   render-app
                                       :inputs [(app/map-signal #(app/make-action :core.action/keyboard %) keyboard/signal)
+                                               (zk/key-signal #(do
+                                                                (print "key-signal" %1 %2 %3 %4)
+                                                                (app/make-action :core.action/pc-key %)))
                                                #_(app/proxy #(app/make-action :core/keyboard %) keyboard/signal)]}))
 
 #_(defonce input-signal (app/start-adv {:init   keyboard/initial-model
@@ -323,10 +370,9 @@
                                       :inputs (vector keyboard/signal)}))
 
 
-#_(defonce input-signal (app/start {:init          keyboard/initial-model
-                                  :update        keyboard/update-model
-                                  :view          keyboard/render-keyboard}))
-
+#_(defonce input-signal (app/start {:init   keyboard/initial-model
+                                    :update keyboard/update-model
+                                    :view   keyboard/render-keyboard}))
 
 (defn request-web-midi []
   (let [channel (async/chan)
@@ -340,7 +386,7 @@
            (async/go-loop
              []
              (let [[evt midi] (async/<! ch)]
-               (when (= evt :key-press)
+               (when (= evt :core.action/key-press)
                  (print "play!!!!")
                  (abc/play-abc (abc/midi-to-abc midi)))
                (recur)))))
@@ -365,4 +411,4 @@
                     pitch (aget data 1)]
                 (when (= type 144)
                   (js/console.log type pitch)
-                  (async/put! input-signal [:key-press pitch]))))))))
+                  (async/put! input-signal (app/make-action :core.action/key-press pitch)))))))))

@@ -1,6 +1,6 @@
 (ns music-score.start-app
   (:require
-    [rum]
+    [rum.core :as rum]
     [jamesmacaulay.zelkova.signal :as z]
     [cljs.core.async.impl.protocols :as async-impl]
     [cljs.core.async :as async])
@@ -32,7 +32,7 @@
     (go
       (loop []
         (let [v (async/<! in)]
-          (print "loop" v)
+          (print "start_app map-signal loop" v)
           (async/put! out (f v))
           (recur))))
     out))

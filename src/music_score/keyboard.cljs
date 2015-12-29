@@ -3,19 +3,23 @@
             [clojure.data :as data]
             [clojure.string :as s]
             [cljs.pprint :as pprint :refer [pprint]]
-            [rum]
+            [cljs.test :refer-macros [deftest is testing run-tests]]
+            [rum.core :as rum :refer-macros [defc]]
             [datascript.core :as d]
             [cljsjs.d3]
-    #_[music-score.ui :as ui]                               ;; causes cyclic deps, figwheel?
+    #_[music-score.ui :as ui]                               ;; breaks figwheel?
             [music-score.abc :as abc]
             [music-score.vex :as vex]
             [jamesmacaulay.zelkova.signal :as z]
-            [music-score.start-app :as start])
+            [music-score.start-app :as start]
+            [cljs.analyzer :as ana])
   (:require-macros [cljs.core.async.macros :as async]
-                   [rum :refer [defc defcs]]
-                   [music-score.utils :refer [debug]]))
+                   [music-score.utils :as utils :refer [print debug]]))
 
+(def debug 0)
 
+(enable-console-print!)
+(print "log from keyboard")
 
 (defn div-with-rem
   ([n d]
@@ -45,24 +49,30 @@
 
 (defn key-offset [p key-width]
   (let [[wc color] (white-count p)
-        padding (if (= color :black) (- 0 (/ 20 4)) 0)
+        padding (if (= color :black) (- 0 (/ key-width 4)) 0)
         offset (+ (* wc key-width) padding)]
     [offset color]))
 
+(defn select!
+  [svg selector data]
+  (-> svg
+      (.selectAll selector)
+      (.data (clj->js data) (fn [d] (.-pitch d)))))
 
-(defonce draw-keyboard!
+(declare render-chart)
+
+(def draw-keyboard!
          (let [start 21
                width 20
                [start-offset _] (key-offset start width)
                domain (range start 109)
-               data2 (as-> domain d
-                           (map (fn [p]
-                                  (let [[offset color] (key-offset p 20)
-                                        offset (- offset start-offset)]
-                                    #js {:pitch p :offset offset :kind color})) d))
+               data (as-> domain d
+                          (map (fn [p]
+                                 (let [[offset color] (key-offset p 20)
+                                       offset (- offset start-offset)]
+                                   #js {:pitch p :offset offset :kind color})) d))
                ]
-           (fn [node channel model {[l h] :range}]
-             (println "draw-keyboard!")
+           (fn [node channel model {[l h] :range} configuring? chart-data]
              (let [svg (-> js/d3
                            (.select node))
                    selection
@@ -71,11 +81,14 @@
                      (into #{} (range l (inc h))))
 
                    {:keys [black white]}
-                   (as-> data2 data2
+                   (as-> data data
                          (map (fn [d]
-                                (aset d "inrange" (selection (.-pitch d)))
-                                d) data2)
-                         (group-by #(.-kind %) data2))
+                                (aset d "selected"
+                                      (if configuring?
+                                        (selection (.-pitch d))
+                                        true))
+                                d) data)
+                         (group-by #(.-kind %) data))
 
                    white (clj->js white)
                    black (clj->js black)
@@ -103,17 +116,15 @@
                                            (async/put! channel
                                                        (start/make-action
                                                          :keyboard.action/key-out (.-pitch a)))))))
-                   select! (fn [selector data]
-                             (-> svg
-                                 (.selectAll selector)
-                                 (.data (clj->js data) (fn [d] (.-pitch d)))))
+
 
                    draw-key! (fn [selector class data stroke w h rx ry]
-                               (let [selection (select! selector data)]
+                               (let [selection (select! svg selector data)]
                                  (-> selection
                                      (.enter)
                                      (.append "rect")
                                      (.attr "x" (fn [d i] (.-offset d)))
+                                     (.attr "y" 100)
                                      (.attr "rx" rx)
                                      (.attr "ry" ry)
                                      (.attr "stroke" stroke)
@@ -131,12 +142,11 @@
 
                    compute-class (fn [base-class off-class]
                                    (fn [d]
-                                     (if (.-inrange d)
+                                     (if (.-selected d)
                                        (str base-class " " off-class)
                                        base-class)))
 
                    ]
-               (println "draw-keyboard" selection)
 
                (draw-white! "rect.key"
                             "white key"
@@ -150,32 +160,74 @@
                             black)
                (draw-black! "rect.mask"
                             (compute-class "black key mask" "off")
-                            black))
-             )))
+                            black)
+
+               ;; draw chart
+               #_(render-chart svg data chart-data configuring?)
+
+               )))
+  )
+
+(defn render-chart [svg data chart-data configuring?]
+  (let [chart-data (reduce (fn [acc [pitch all correct maxcount]]
+                             (assoc acc pitch {:pitch   pitch
+                                               :all     all
+                                               :correct correct
+                                               :maxcount maxcount})) {} chart-data)
+        get-chart-data (fn [chart-data prop] (fn [d] (get-in chart-data [(.-pitch d) prop])))
+        get-all (get-chart-data chart-data :all)
+        get-correct (get-chart-data chart-data :correct)
+        get-max (get-chart-data chart-data :maxcount)
+        get-pitch (get-chart-data chart-data :pitch)
+        compute-height (fn [d]
+                         (let [all (get-all d)
+                               mcount (get-max d)
+
+                               all (or all 0)
+                               mcount (or mcount 1)
+                               ]
+                           (* (/ all mcount) 100)
+                           ))
+        x-offset (fn [d]
+                   (if (= (.-kind d) :white)
+                     (+ 5 (.-offset d))
+                     (.-offset d)))
+        selection (select! svg "rect.bar" data)]
+    (-> selection
+        (.enter)
+        (.append "rect")
+        (.attr "class" "bar"))
+    (-> selection
+        (.attr "x" x-offset)
+        (.attr "y" (fn [d] (->> (compute-height d)
+                                (- 100))))
+        (.attr "height" compute-height)
+        (.attr "width" 9)
+        (.attr "fill" "green"))))
+
 
 (defn render-keyboard-hook [state]
-  (let [[channel model config & r] (->> state
+  (let [[channel model config configuring? chart-data & r] (->> state
                                  (:rum/args))]
     (->> state (:rum/args) (second) (debug))
     (as-> state x
           (:rum/react-component x)
           (.getDOMNode x)
           (.-firstChild x)
-          (draw-keyboard! x channel model config)))
+          (draw-keyboard! x channel model config configuring? chart-data)))
   state)
 
 (defc render-keyboard <
       {:did-mount
        (fn [state]
-         (println "render-keyboard did-mount")
+         (print "render-keyboard did-mount")
          (render-keyboard-hook state))
        :did-update
        (fn [state]
-         (println "render-keyboard did-update")
+         (print "render-keyboard did-update")
          (render-keyboard-hook state))}
-      [signal data config]
+      [signal data config configuring? chart-data]
       (do
-        (println "render-keyboard render")
         [:div#keybd
          [:svg {:width 1400 :height 400}]]))
 
@@ -197,7 +249,7 @@
     model))
 
 (defn update-model [action model]
-  (println "keyboard update-model" action model)
+  (print "keyboard update-model" action model)
   (let [[action-name pitch & r] action
 
         new-model
@@ -218,6 +270,7 @@
           :keyboard.action/key-up
           (-> model
               (add-to-selection pitch)
+              ;; how to improve on this
               ((fn [model] (async/put! signal
                                        (start/make-action
                                          :keyboard.action/selection
@@ -226,5 +279,5 @@
               (assoc-in [:dragging] false)
               (assoc-in [:selection] #{}))
           model)]
-    (println "keyboard new-model" new-model)
+    (print "keyboard new-model" new-model)
     new-model))

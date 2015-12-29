@@ -6,12 +6,11 @@
               [music-score.d3playground :as d3]
               [music-score.keyboard :as keyboard]
               [music-score.start-app :as start]
-              [rum]
+              [rum.core :as rum :refer-macros [defc defcs]]
               [jamesmacaulay.zelkova.signal :as z])
     (:require-macros
-      [music-score.utils :as utils :refer [debug]]
-      [cljs.core.async.macros :as async]
-      [rum :refer [defc defcs]]))
+      [music-score.utils :as utils :refer [print debug]]
+      [cljs.core.async.macros :as async]))
 
 (enable-console-print!)
 
@@ -255,19 +254,23 @@
 (rum/defc root-component <
           {:did-update
            (fn [state]
-             (println "root-component did-update")
+             (print "root-component did-update")
              state)}
   [input-signal state]
-  (let [clef (get-in state [:config :key])
-        question (state :question)
-        answer (state :answer)
-        guesses (state :guesses)
-        dragging (state :dragging)
-        keyboard (state :keyboard)
-        config (state :config)
-        cls (if dragging
+  (let [{:keys [question
+                answer
+                guesses
+                dragging?
+                keyboard
+                config
+                configuring?
+                chart-data]} state
+        
+
+        clef (get-in state [:config :key])
+        cls (if dragging?
               "dragging" "")]
-    (println "render root-component")
+    (print "root-component render")
     [:div {:id             "container"
            :class          cls
            :on-mouse-move  #(do (async/put! drag-channel [:mouse-move (get-evt-coord %)]) nil)
@@ -279,6 +282,8 @@
      (keyboard/render-keyboard (start/proxy #(start/make-action :core.action/keyboard %) input-signal)
                                #_(start/map-signal #(start/make-action :core.action/keyboard %) input-signal)
                                keyboard
-                               config)
+                               config
+                               configuring?
+                               chart-data)
      #_(render-keyboard state input-signal)
      [:div#vex]]))
