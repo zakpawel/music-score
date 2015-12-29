@@ -1,0 +1,118 @@
+/* some style */
+
+html, body, #app, #container {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+}
+
+#container.dragging {
+	height: 100%;
+	cursor: ew-resize;
+	position: relative;
+}
+
+#keyboard {
+	position: fixed;
+	bottom: 0;
+}
+
+#notation-exercise, #notation-answer {
+	height: 250px !important;
+
+	transform-origin: 0 0;
+}
+
+#sidebar {
+    padding: 10px;
+    box-shadow: 0px 0px 11px gray;
+    background: linear-gradient( 0deg, #9E9E9E -204%, rgba(255, 255, 255, 0.67), #9E9E9E 300%);
+}
+
+.config svg .note + rect {
+	cursor: ns-resize;
+}
+
+.config {
+	display: table;
+}
+
+.clefs {
+	display: table-cell;
+	vertical-align: top;
+	border-radius: 10px;
+	background-color: dodgerblue;
+	color: white;
+	font-weight: bold;
+	padding: 0 10px;
+	text-align: center;
+	user-select: none;
+	-moz-user-select: none;
+	-webkit-user-select: none;
+	cursor: pointer;
+}
+
+.range-config * {
+	display: table-cell;
+}
+
+.error {
+	fill: red;
+}
+
+.correct {
+	fill: green;
+}
+
+.octave {
+	display: inline-block;
+	position: relative;
+}
+
+.key {
+	box-sizing: border-box;
+	user-select: none;
+	-moz-user-select: none;
+	-webkit-user-select: none;
+}
+
+.key.black {
+	width: 10px;
+	height: 75px;
+	fill: black;
+}
+
+.key.white {
+	width: 20px;
+	height: 120px;
+	fill: white;
+}
+
+.key.white.mask, .key.black.mask {
+	fill: #718996;
+	opacity: 0.4;
+}
+
+.key.white.mask.off, .key.black.mask.off {
+	opacity: 0;
+}
+
+.number-field {
+	width: 30px;
+	padding: 0 10px;
+	display: inline-block;
+	border-radius: 10px;
+	background-color: dodgerblue;
+	color: white;
+	font-weight: bold;
+	text-align: center;
+	user-select: none;
+	-moz-user-select: none;
+	-webkit-user-select: none;
+}
+
+.number-field:hover {
+	cursor: ew-resize;
+}
